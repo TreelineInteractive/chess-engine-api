@@ -7,11 +7,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.config import Settings, get_settings
+from app.models.requests import EngineConfigRequest, PerftRequest
 from app.models.responses import (
+    BenchmarkResponse,
     DefaultParameters,
+    EngineConfigResponse,
     EngineInfoResponse,
     ErrorResponse,
     HealthResponse,
+    PerftResponse,
 )
 from app.services.stockfish_service import (
     StockfishError,
@@ -49,7 +53,7 @@ async def get_engine_info(
     """Get Stockfish engine information."""
     try:
         info = await service.get_engine_info()
-        
+
         return EngineInfoResponse(
             engine=info["engine"],
             supported_features=info["supported_features"],
@@ -109,7 +113,7 @@ async def health_check(
     try:
         engine_available = await service.is_engine_available()
         uptime = time.time() - _start_time
-        
+
         return HealthResponse(
             status="healthy" if engine_available else "unhealthy",
             engine_available=engine_available,
@@ -119,7 +123,7 @@ async def health_check(
     except Exception as e:
         logger.error(f"Health check failed: {e}")
         uptime = time.time() - _start_time
-        
+
         return HealthResponse(
             status="unhealthy",
             engine_available=False,
@@ -153,7 +157,7 @@ async def readiness_check(
     try:
         engine_available = await service.is_engine_available()
         uptime = time.time() - _start_time
-        
+
         if not engine_available:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -164,7 +168,7 @@ async def readiness_check(
                     }
                 },
             )
-        
+
         return HealthResponse(
             status="healthy",
             engine_available=True,
@@ -182,6 +186,185 @@ async def readiness_check(
                     "code": "NOT_READY",
                     "message": "Service is not ready",
                     "details": str(e),
+                }
+            },
+        )
+
+
+@router.post(
+    "/perft",
+    response_model=PerftResponse,
+    summary="Run Perft Test",
+    description="""
+    Run a performance test (perft) to count all possible positions from a given position.
+    
+    Perft is used for move generation testing and debugging. It counts all leaf nodes
+    at a given depth, which is useful for validating chess engine correctness.
+    
+    **Parameters:**
+    - `fen`: FEN string or "startpos" for starting position
+    - `depth`: Search depth (1-7, limited by MAX_PERFT_DEPTH config)
+    - `divide`: If true, return per-move node counts
+    
+    **Returns:**
+    - Total node count
+    - Optional per-move breakdown if divide=true
+    - Time taken
+    """,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid request"},
+        403: {"model": ErrorResponse, "description": "Perft disabled"},
+        500: {"model": ErrorResponse, "description": "Engine error"},
+    },
+)
+async def run_perft(
+    request: PerftRequest,
+    service: Annotated[StockfishService, Depends(get_stockfish_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> PerftResponse:
+    """Run performance test (perft)."""
+
+    try:
+        result = await service.run_perft(
+            fen=request.fen,
+            depth=request.depth,
+            divide=request.divide,
+        )
+
+        return PerftResponse(**result)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_INPUT",
+                    "message": str(e),
+                }
+            },
+        )
+    except StockfishError as e:
+        logger.error(f"Stockfish error in perft: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
+                }
+            },
+        )
+
+
+@router.get(
+    "/benchmark",
+    response_model=BenchmarkResponse,
+    summary="Run Engine Benchmark",
+    description="""
+    Run the built-in Stockfish benchmark to measure engine performance.
+    
+    This executes the `bench` command which analyzes a standard set of positions
+    to measure nodes per second (NPS) and overall performance.
+    
+    **Returns:**
+    - Total nodes searched
+    - Time taken in milliseconds
+    - Nodes per second (NPS)
+    """,
+    responses={
+        403: {"model": ErrorResponse, "description": "Benchmark disabled"},
+        500: {"model": ErrorResponse, "description": "Engine error"},
+    },
+)
+async def run_benchmark(
+    service: Annotated[StockfishService, Depends(get_stockfish_service)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> BenchmarkResponse:
+    """Run engine benchmark."""
+
+    try:
+        result = await service.run_benchmark()
+        return BenchmarkResponse(**result)
+
+    except StockfishError as e:
+        logger.error(f"Stockfish error in benchmark: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
+                }
+            },
+        )
+    except Exception as e:
+        logger.exception(f"Unexpected error in benchmark: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": "BENCHMARK_ERROR",
+                    "message": "Failed to run benchmark",
+                    "details": str(e),
+                }
+            },
+        )
+
+
+@router.post(
+    "/engine/configure",
+    response_model=EngineConfigResponse,
+    summary="Update Engine Configuration",
+    description="""
+    Update Stockfish UCI engine parameters.
+    
+    **Parameters:**
+    - `threads`: Number of CPU threads (1-128)
+    - `hash_mb`: Hash table size in MB (1-131072)
+    - `skill_level`: Skill level (0-20, 20 is strongest)
+    - `move_overhead_ms`: Move overhead in milliseconds
+    
+    **Returns:**
+    - Updated configuration values
+    - Success status
+    """,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid configuration"},
+        500: {"model": ErrorResponse, "description": "Engine error"},
+    },
+)
+async def configure_engine(
+    request: EngineConfigRequest,
+    service: Annotated[StockfishService, Depends(get_stockfish_service)],
+) -> EngineConfigResponse:
+    """Update engine configuration."""
+
+    try:
+        # Convert request to dictionary, excluding None values
+        config_updates = request.model_dump(exclude_none=True)
+
+        result = await service.update_configuration(config_updates)
+
+        return EngineConfigResponse(**result)
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_CONFIG",
+                    "message": str(e),
+                }
+            },
+        )
+    except StockfishError as e:
+        logger.error(f"Stockfish error in configure: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
                 }
             },
         )

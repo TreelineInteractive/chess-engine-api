@@ -20,7 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import get_settings
-from app.routers import analysis_router, engine_router, moves_router
+from app.routers import analysis_router, engine_router, moves_router, tablebase_router
 from app.services.stockfish_service import shutdown_stockfish_service
 
 # Configure logging
@@ -30,7 +30,7 @@ settings = get_settings()
 def configure_logging() -> None:
     """Configure structured logging."""
     log_level = getattr(logging, settings.log_level.upper(), logging.INFO)
-    
+
     if settings.log_format == "json":
         # JSON structured logging for production
         structlog.configure(
@@ -69,7 +69,7 @@ def configure_logging() -> None:
             logger_factory=structlog.stdlib.LoggerFactory(),
             cache_logger_on_first_use=True,
         )
-    
+
     # Configure root logger
     logging.basicConfig(
         format="%(message)s",
@@ -95,9 +95,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         version=settings.api_version,
         debug=settings.debug,
     )
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Stockfish API")
     await shutdown_stockfish_service()
@@ -173,10 +173,10 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     """Log all requests with timing information."""
     start_time = time.time()
-    
+
     # Generate request ID
     request_id = str(int(start_time * 1000000))
-    
+
     # Log request
     logger.info(
         "Request started",
@@ -185,13 +185,13 @@ async def log_requests(request: Request, call_next):
         path=request.url.path,
         client_ip=request.client.host if request.client else None,
     )
-    
+
     try:
         response = await call_next(request)
-        
+
         # Calculate response time
         response_time_ms = int((time.time() - start_time) * 1000)
-        
+
         # Log response
         logger.info(
             "Request completed",
@@ -201,16 +201,16 @@ async def log_requests(request: Request, call_next):
             status_code=response.status_code,
             response_time_ms=response_time_ms,
         )
-        
+
         # Add response headers
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Response-Time"] = f"{response_time_ms}ms"
-        
+
         return response
-        
+
     except Exception as e:
         response_time_ms = int((time.time() - start_time) * 1000)
-        
+
         logger.error(
             "Request failed",
             request_id=request_id,
@@ -232,7 +232,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         method=request.method,
         error=str(exc),
     )
-    
+
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -248,6 +248,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(analysis_router)
 app.include_router(moves_router)
 app.include_router(engine_router)
+app.include_router(tablebase_router)
+app.include_router(tablebase_router)
 
 
 # Root endpoint
@@ -264,7 +266,7 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         "main:app",
         host=settings.host,

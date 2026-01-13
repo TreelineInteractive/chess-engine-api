@@ -345,6 +345,234 @@ Build a production-ready REST API service that wraps the Stockfish chess engine,
 }
 ```
 
+### 11. WDL Statistics
+**Endpoint**: `POST /api/v1/wdl-stats`
+
+**Request Body**:
+```json
+{
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "depth": 15
+}
+```
+
+**Response**:
+```json
+{
+  "wdl": {
+    "win": 49.2,
+    "draw": 32.5,
+    "loss": 18.3
+  },
+  "evaluation": {
+    "type": "cp",
+    "value": 25
+  },
+  "depth": 15
+}
+```
+
+**Features**:
+- Calculate Win/Draw/Loss probabilities using Lichess formula
+- Based on centipawn evaluation
+- Returns percentages that sum to 100%
+
+### 12. Opening Book Lookup
+**Endpoint**: `POST /api/v1/opening-book`
+
+**Request Body**:
+```json
+{
+  "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"],
+  "starting_fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+}
+```
+
+**Response**:
+```json
+{
+  "opening_name": "Italian Game",
+  "eco": "C50",
+  "variation": "Italian Game",
+  "in_book": true
+}
+```
+
+**Features**:
+- Identify chess openings by move sequence
+- Return ECO code classification
+- Support 30+ popular openings including:
+  - Italian Game, Ruy Lopez, Sicilian variations
+  - French Defense, Caro-Kann
+  - Queen's Gambit, Indian Defenses
+  - King's Indian, Nimzo-Indian, Queen's Indian
+
+### 13. Perft Testing
+**Endpoint**: `POST /api/v1/perft`
+
+**Request Body**:
+```json
+{
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "depth": 5,
+  "divide": false
+}
+```
+
+**Response**:
+```json
+{
+  "nodes": 4865609,
+  "depth": 5,
+  "time_ms": 1250,
+  "nps": 3892487,
+  "divide": null
+}
+```
+
+**Response (with divide=true)**:
+```json
+{
+  "nodes": 20,
+  "depth": 1,
+  "time_ms": 2,
+  "nps": 10000,
+  "divide": {
+    "a2a3": 1,
+    "a2a4": 1,
+    "b2b3": 1,
+    "b2b4": 1,
+    "c2c3": 1,
+    "c2c4": 1,
+    "d2d3": 1,
+    "d2d4": 1,
+    "e2e3": 1,
+    "e2e4": 1,
+    "f2f3": 1,
+    "f2f4": 1,
+    "g2g3": 1,
+    "g2g4": 1,
+    "h2h3": 1,
+    "h2h4": 1,
+    "b1a3": 1,
+    "b1c3": 1,
+    "g1f3": 1,
+    "g1h3": 1
+  }
+}
+```
+
+**Features**:
+- Performance testing for move generation
+- Count all possible moves at a given depth
+- Divide mode shows breakdown by first move
+- Configurable max depth (default 6, max 7)
+- Validates chess engine correctness
+
+### 14. Engine Benchmark
+**Endpoint**: `GET /api/v1/benchmark`
+
+**Response**:
+```json
+{
+  "total_nodes": 22837303,
+  "nodes_per_second": 457000,
+  "time_ms": 49967,
+  "positions_tested": 50,
+  "depth": 13
+}
+```
+
+**Features**:
+- Run Stockfish's built-in benchmark
+- Tests engine on 50 standard positions
+- Returns performance metrics (NPS - nodes per second)
+- Useful for comparing hardware performance
+- Configurable timeout (default 60s, max 300s)
+
+### 15. Engine Configuration
+**Endpoint**: `POST /api/v1/engine/configure`
+
+**Request Body**:
+```json
+{
+  "threads": 4,
+  "hash_mb": 512,
+  "skill_level": 15,
+  "ponder": false,
+  "multi_pv": 3
+}
+```
+
+**Response**:
+```json
+{
+  "updated_parameters": {
+    "threads": 4,
+    "hash_mb": 512,
+    "skill_level": 15
+  },
+  "current_configuration": {
+    "threads": 4,
+    "hash_mb": 512,
+    "skill_level": 15,
+    "ponder": false,
+    "multi_pv": 3
+  },
+  "restart_required": false
+}
+```
+
+**Features**:
+- Dynamically update Stockfish UCI parameters
+- Configure threads (1-128), hash size (1-8192 MB)
+- Set skill level (0-20), MultiPV (1-500)
+- Enable/disable ponder mode
+- No engine restart required
+- Returns current configuration state
+
+### 16. Tablebase Probe
+**Endpoint**: `POST /api/v1/tablebase-probe`
+
+**Request Body**:
+```json
+{
+  "fen": "8/8/8/8/8/1k6/8/K7 w - - 0 1"
+}
+```
+
+**Response**:
+```json
+{
+  "wdl": "draw",
+  "dtz": 0,
+  "dtm": null,
+  "best_move": "Ka1",
+  "evaluation": {
+    "type": "cp",
+    "value": 0
+  }
+}
+```
+
+**Error Response (if not configured)**:
+```json
+{
+  "error": {
+    "code": "TABLEBASE_NOT_CONFIGURED",
+    "message": "Syzygy tablebase path not configured"
+  }
+}
+```
+
+**Features**:
+- Query Syzygy endgame tablebases for perfect play
+- WDL (Win/Draw/Loss) outcome
+- DTZ (Distance to Zeroing move) metric
+- Requires SYZYGY_PATH environment variable
+- Only works for positions ≤7 pieces
+- Returns best move from tablebase
+
 ## Future WebSocket Support Architecture
 
 ### Design Considerations
@@ -411,6 +639,9 @@ MAX_DEPTH=25
 DEFAULT_DEPTH=15
 MAX_ANALYSIS_TIME_MS=10000
 API_RATE_LIMIT_PER_MINUTE=100
+SYZYGY_PATH=/path/to/syzygy/tablebases
+MAX_PERFT_DEPTH=6
+BENCHMARK_TIMEOUT_SECONDS=60
 ```
 
 ## Docker Configuration
@@ -508,7 +739,13 @@ stockfish-api/
 │   │   ├── __init__.py
 │   │   ├── analysis.py         # Analysis endpoints
 │   │   ├── moves.py            # Move-related endpoints
-│   │   └── engine.py           # Engine info endpoints
+│   │   ├── engine.py           # Engine info endpoints
+│   │   └── tablebase.py        # Tablebase endpoints
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── stockfish_service.py  # Stockfish engine wrapper
+│   │   ├── analysis_service.py   # High-level analysis logic
+│   │   └── opening_service.py    # Opening book database
 │   └── utils/
 │       ├── __init__.py
 │       ├── chess_utils.py      # Chess helper functions
@@ -517,7 +754,9 @@ stockfish-api/
 │   ├── __init__.py
 │   ├── test_analysis.py
 │   ├── test_moves.py
-│   └── test_engine.py
+│   ├── test_engine.py
+│   ├── test_tablebase.py
+│   └── test_utils.py
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
@@ -683,11 +922,17 @@ httpx==0.26.0
 ## Success Criteria
 
 ### Functional Requirements Met
-- ✅ All 10 REST endpoints implemented and tested
+- ✅ All 16 REST endpoints implemented and tested (10 original + 6 new)
 - ✅ Docker container builds successfully
 - ✅ Stockfish 17.1 integrated and responding
 - ✅ Input validation working correctly
 - ✅ Error handling comprehensive
+- ✅ WDL statistics with Lichess formula
+- ✅ Opening book with 30+ openings and ECO codes
+- ✅ Perft testing for move generation validation
+- ✅ Engine benchmarking capability
+- ✅ Dynamic engine configuration
+- ✅ Syzygy tablebase support
 
 ### Non-Functional Requirements Met
 - ✅ Average response time < 1 second for depth 15

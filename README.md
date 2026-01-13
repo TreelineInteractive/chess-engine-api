@@ -16,6 +16,12 @@ A production-ready REST API service that wraps the Stockfish chess engine, provi
 - 📝 **Legal Moves** - List all legal moves for any position
 - 🎮 **Game Analysis** - Analyze complete games with accuracy scores
 - 🔍 **FEN Validation** - Validate FEN strings with error details
+- 📈 **WDL Statistics** - Win/Draw/Loss probabilities using Lichess formula
+- 📚 **Opening Book** - ECO code and opening identification
+- ⚡ **Perft Testing** - Performance testing for move generation
+- 🏆 **Benchmarking** - Engine performance measurement
+- ⚙️ **Engine Configuration** - Runtime UCI parameter updates
+- 🎲 **Tablebase Support** - Syzygy endgame tablebase probing
 - 🏗️ **Production Ready** - Docker containerized, horizontally scalable
 - 📚 **Auto Documentation** - OpenAPI/Swagger docs included
 - 🚀 **High Performance** - Async I/O, connection pooling
@@ -169,6 +175,60 @@ Analyze a complete chess game move by move.
 }
 ```
 
+#### POST `/api/v1/wdl-stats`
+Calculate Win/Draw/Loss probabilities for a position using the Lichess formula.
+
+**Request:**
+```json
+{
+  "fen": "startpos",
+  "depth": 15
+}
+```
+
+**Response:**
+```json
+{
+  "wdl": {
+    "win": 40.7,
+    "draw": 22.9,
+    "loss": 36.4
+  },
+  "evaluation": {
+    "type": "cp",
+    "value": 30
+  },
+  "depth": 15,
+  "model": "Lichess formula",
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "time_ms": 1563
+}
+```
+
+#### POST `/api/v1/opening-book`
+Identify chess opening name, ECO code, and theory for a sequence of moves.
+
+**Request:**
+```json
+{
+  "moves": ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]
+}
+```
+
+**Response:**
+```json
+{
+  "opening_name": "Italian Game",
+  "eco": "C50",
+  "variation": "Giuoco Piano",
+  "popularity": "very common",
+  "theory_moves": ["f8c5", "g8f6"],
+  "known_until_move": 5,
+  "in_book": true,
+  "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+}
+```
+
 ### Move Endpoints
 
 #### POST `/api/v1/validate-move`
@@ -255,6 +315,99 @@ Health check endpoint.
 }
 ```
 
+#### POST `/api/v1/perft`
+Run performance test (perft) to count all possible positions from a given position.
+
+**Request:**
+```json
+{
+  "fen": "startpos",
+  "depth": 5,
+  "divide": false
+}
+```
+
+**Response:**
+```json
+{
+  "nodes": 4865609,
+  "depth": 5,
+  "time_ms": 14507,
+  "nps": 335397,
+  "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+  "divide": null
+}
+```
+
+#### GET `/api/v1/benchmark`
+Run the built-in Stockfish benchmark to measure engine performance.
+
+**Response:**
+```json
+{
+  "total_nodes": 2030154,
+  "nodes_per_second": 446285,
+  "time_ms": 4549,
+  "positions_tested": 50,
+  "depth": 13,
+  "threads": 2,
+  "hash_mb": 256,
+  "signature": "2030154"
+}
+```
+
+#### POST `/api/v1/engine/configure`
+Update Stockfish UCI engine parameters.
+
+**Request:**
+```json
+{
+  "threads": 4,
+  "hash_mb": 512,
+  "skill_level": 20
+}
+```
+
+**Response:**
+```json
+{
+  "updated_parameters": {
+    "threads": 4,
+    "hash_mb": 512
+  },
+  "current_configuration": {
+    "threads": 4,
+    "hash_mb": 512,
+    "skill_level": 20,
+    "ponder": false,
+    "multi_pv": 1
+  },
+  "restart_required": false
+}
+```
+
+### Tablebase Endpoints
+
+#### POST `/api/v1/tablebase-probe`
+Query Syzygy endgame tablebases for perfect play in endgame positions.
+
+**Request:**
+```json
+{
+  "fen": "8/8/8/8/8/1k6/8/K7 w - - 0 1"
+}
+```
+
+**Response:**
+```json
+{
+  "wdl": "draw",
+  "dtz": 0,
+  "in_tablebase": true,
+  "fen": "8/8/8/8/8/1k6/8/K7 w - - 0 1"
+}
+```
+
 ## Configuration
 
 Environment variables (see `.env.example`):
@@ -289,6 +442,11 @@ CORS_ORIGINS=*
 # Logging
 LOG_LEVEL=INFO
 LOG_FORMAT=json
+
+# Advanced Features Configuration
+SYZYGY_PATH=              # Path to Syzygy tablebase files (leave empty if not using)
+MAX_PERFT_DEPTH=6         # Maximum perft depth (1-7)
+BENCHMARK_TIMEOUT_SECONDS=60
 ```
 
 ## Docker Deployment

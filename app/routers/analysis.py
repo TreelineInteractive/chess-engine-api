@@ -11,6 +11,8 @@ from app.models.requests import (
     BestMoveRequest,
     EvaluateRequest,
     MultiPVRequest,
+    OpeningBookRequest,
+    WDLStatsRequest,
 )
 from app.models.responses import (
     AnalyzeGameResponse,
@@ -21,7 +23,11 @@ from app.models.responses import (
     MultiPVResponse,
 )
 from app.services.analysis_service import AnalysisService, get_analysis_service
-from app.services.stockfish_service import StockfishError
+from app.services.stockfish_service import (
+    StockfishError,
+    StockfishService,
+    get_stockfish_service,
+)
 from app.utils.validators import validate_fen
 
 logger = logging.getLogger(__name__)
@@ -78,7 +84,7 @@ async def get_best_move(
 ) -> BestMoveResponse:
     """Get the best move for a chess position."""
     _validate_fen_or_raise(request.fen)
-    
+
     try:
         return await service.get_best_move(
             fen=request.fen,
@@ -144,7 +150,7 @@ async def evaluate_position(
 ) -> EvaluateResponse:
     """Evaluate a chess position."""
     _validate_fen_or_raise(request.fen)
-    
+
     try:
         return await service.evaluate_position(
             fen=request.fen,
@@ -205,7 +211,7 @@ async def get_multi_pv(
 ) -> MultiPVResponse:
     """Get multiple best lines for a position."""
     _validate_fen_or_raise(request.fen)
-    
+
     try:
         return await service.get_multi_pv(
             fen=request.fen,
@@ -269,7 +275,7 @@ async def analyze_position(
 ) -> AnalyzePositionResponse:
     """Perform detailed position analysis."""
     _validate_fen_or_raise(request.fen)
-    
+
     try:
         return await service.analyze_position(
             fen=request.fen,
@@ -348,7 +354,7 @@ async def analyze_game(
 ) -> AnalyzeGameResponse:
     """Analyze a complete chess game."""
     _validate_fen_or_raise(request.starting_fen)
-    
+
     try:
         return await service.analyze_game(
             moves=request.moves,
@@ -385,6 +391,130 @@ async def analyze_game(
                     "code": "ENGINE_ERROR",
                     "message": "An unexpected error occurred during game analysis",
                     "details": str(e),
+                }
+            },
+        )
+
+
+@router.post(
+    "/wdl-stats",
+    response_model=None,
+    summary="Get Win/Draw/Loss statistics",
+    description="""
+    Calculate Win/Draw/Loss probabilities for a chess position using the Lichess formula.
+    
+    This endpoint evaluates the position and converts the centipawn evaluation into
+    win/draw/loss percentages using Lichess's statistical model.
+    
+    **Formula:**
+    - Win% = 50 + 50 × (2 / (1 + e^(-0.00368208 × cp)) - 1)
+    - Loss% calculated symmetrically
+    - Draw% = 100 - Win% - Loss%
+    
+    **Parameters:**
+    - `fen`: FEN string or "startpos"
+    - `depth`: Analysis depth (1-25, default: 20)
+    
+    **Returns:**
+    - Centipawn evaluation
+    - Win/Draw/Loss percentages
+    - Mate distance if applicable
+    """,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid FEN string"},
+        500: {"model": ErrorResponse, "description": "Engine error"},
+    },
+)
+async def get_wdl_stats(
+    request: WDLStatsRequest,
+    service: Annotated[StockfishService, Depends(get_stockfish_service)],
+) -> dict:
+    """Get Win/Draw/Loss probability statistics for a position."""
+
+    try:
+        _validate_fen_or_raise(request.fen)
+
+        result = await service.get_wdl_statistics(fen=request.fen, depth=request.depth)
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_INPUT",
+                    "message": str(e),
+                }
+            },
+        )
+    except StockfishError as e:
+        logger.error(f"Stockfish error in wdl-stats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "error": {
+                    "code": e.code,
+                    "message": e.message,
+                }
+            },
+        )
+
+
+@router.post(
+    "/opening-book",
+    response_model=None,
+    summary="Look up chess opening",
+    description="""
+    Identify chess opening name, ECO code, and theory for a sequence of moves.
+    
+    This endpoint analyzes a sequence of moves and returns information about
+    the opening being played, including its name, ECO code, and theoretical
+    continuations.
+    
+    **ECO Code:**
+    Encyclopedia of Chess Openings (ECO) classification system:
+    - A00-A99: Flank openings
+    - B00-B99: Semi-Open games (other than French)
+    - C00-C99: Open games and French Defense
+    - D00-D99: Closed games and Semi-Closed games
+    - E00-E99: Indian defenses
+    
+    **Parameters:**
+    - `moves`: List of moves in UCI or SAN notation
+    - `starting_fen`: Optional custom starting position
+    
+    **Returns:**
+    - Opening name
+    - ECO code
+    - Variation name
+    - Theory and typical plans
+    """,
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid moves"},
+    },
+)
+async def lookup_opening(
+    request: OpeningBookRequest,
+) -> dict:
+    """Look up chess opening information."""
+    from app.services.opening_service import get_opening_service
+
+    try:
+        opening_service = get_opening_service()
+        result = opening_service.lookup_opening(
+            moves=request.moves, starting_fen=request.starting_fen
+        )
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "INVALID_INPUT",
+                    "message": str(e),
                 }
             },
         )

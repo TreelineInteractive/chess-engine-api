@@ -3,11 +3,7 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import (
-    EN_PASSANT_FEN,
-    INVALID_FEN,
-    STARTING_FEN,
-)
+from tests.conftest import EN_PASSANT_FEN, INVALID_FEN, STARTING_FEN
 
 
 class TestValidateMoveEndpoint:
@@ -20,10 +16,10 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": STARTING_FEN, "move": "e2e4"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["valid"] is True
         assert data["san"] == "e4"
         assert "resulting_fen" in data
@@ -39,7 +35,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": STARTING_FEN, "move": "e2e5"},  # Pawn can't move 3 squares
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
@@ -54,7 +50,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": fen, "move": "d4e5"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is True
@@ -69,7 +65,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": fen, "move": "e1g1"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is True
@@ -84,7 +80,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": fen, "move": "a7a8q"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is True
@@ -93,17 +89,19 @@ class TestValidateMoveEndpoint:
     @pytest.mark.asyncio
     async def test_validate_check_move(self, client: AsyncClient):
         """Test validating a move that gives check."""
-        # Position where Qh5 gives check
-        fen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+        # Position where Bxf7+ gives check
+        fen = "r1bqk2r/pppp1ppp/2n2n2/4p3/2BbP3/2P2N2/PP3PPP/RNBQK2R w KQkq - 0 6"
         response = await client.post(
             "/api/v1/validate-move",
-            json={"fen": fen, "move": "d1h5"},
+            json={"fen": fen, "move": "c4f7"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is True
+        # After Bxf7+, black is in check
         assert data["move_type"]["is_check"] is True
+        assert data["move_type"]["is_capture"] is True
 
     @pytest.mark.asyncio
     async def test_validate_en_passant_move(self, client: AsyncClient):
@@ -112,7 +110,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": EN_PASSANT_FEN, "move": "e5d6"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is True
@@ -126,7 +124,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": INVALID_FEN, "move": "e2e4"},
         )
-        
+
         assert response.status_code == 400
 
     @pytest.mark.asyncio
@@ -136,7 +134,7 @@ class TestValidateMoveEndpoint:
             "/api/v1/validate-move",
             json={"fen": STARTING_FEN, "move": "e4"},  # SAN not UCI
         )
-        
+
         assert response.status_code == 422  # Validation error
 
 
@@ -150,14 +148,14 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": STARTING_FEN},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "legal_moves" in data
         assert "total_moves" in data
         assert data["total_moves"] == 20  # 16 pawn moves + 4 knight moves
-        
+
         for move in data["legal_moves"]:
             assert "uci" in move
             assert "san" in move
@@ -170,13 +168,13 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": STARTING_FEN, "square": "e2"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["total_moves"] == 2  # e3 and e4
         assert data["piece"] == "P"
-        
+
         uci_moves = [m["uci"] for m in data["legal_moves"]]
         assert "e2e3" in uci_moves
         assert "e2e4" in uci_moves
@@ -188,10 +186,10 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": STARTING_FEN, "square": "g1"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["total_moves"] == 2  # Nf3 and Nh3
         assert data["piece"] == "N"
 
@@ -202,7 +200,7 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": STARTING_FEN, "square": "e4"},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["total_moves"] == 0
@@ -215,7 +213,7 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": STARTING_FEN, "square": "z9"},
         )
-        
+
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.asyncio
@@ -227,7 +225,7 @@ class TestLegalMovesEndpoint:
             "/api/v1/legal-moves",
             json={"fen": fen},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         # White has no legal moves (checkmate)
@@ -244,14 +242,14 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": STARTING_FEN},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["valid"] is True
         assert data["errors"] == []
         assert "position_info" in data
-        
+
         position_info = data["position_info"]
         assert position_info["to_move"] == "white"
         assert position_info["castling_rights"] == "KQkq"
@@ -266,10 +264,10 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": INVALID_FEN},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["valid"] is False
         assert len(data["errors"]) > 0
         assert data["position_info"] is None
@@ -281,10 +279,10 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": EN_PASSANT_FEN},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["valid"] is True
         assert data["position_info"]["en_passant"] == "d6"
 
@@ -296,10 +294,10 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": fen},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
+
         assert data["valid"] is True
         assert data["position_info"]["to_move"] == "black"
 
@@ -312,7 +310,7 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": fen},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
@@ -325,7 +323,7 @@ class TestValidateFenEndpoint:
             "/api/v1/validate-fen",
             json={"fen": fen},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
         assert data["valid"] is False
@@ -333,15 +331,16 @@ class TestValidateFenEndpoint:
     @pytest.mark.asyncio
     async def test_validate_fen_in_check(self, client: AsyncClient):
         """Test validating FEN where side to move is in check."""
-        # Position where white is in check
-        fen = "rnb1kbnr/pppp1ppp/4p3/8/7q/5PP1/PPPPP2P/RNBQKBNR w KQkq - 1 3"
+        # Position where black is in check from white bishop on f7
+        fen = "r1bqk2r/pppp1Bpp/2n2n2/4p3/3bP3/2P2N2/PP3PPP/RNBQK2R b KQkq - 0 6"
         response = await client.post(
             "/api/v1/validate-fen",
             json={"fen": fen},
         )
-        
+
         assert response.status_code == 200
         data = response.json()
-        
-        if data["valid"]:
-            assert data["position_info"]["is_check"] is True
+
+        assert data["valid"] is True
+        # Black is in check from the bishop on f7
+        assert data["position_info"]["is_check"] is True

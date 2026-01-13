@@ -106,6 +106,24 @@ class Settings(BaseSettings):
         description="Log format (json or text)",
     )
 
+    # Advanced Features Configuration
+    syzygy_path: Optional[str] = Field(
+        default=None,
+        description="Path to Syzygy tablebase files",
+    )
+    max_perft_depth: int = Field(
+        default=6,
+        ge=1,
+        le=7,
+        description="Maximum perft depth allowed",
+    )
+    benchmark_timeout_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=300,
+        description="Benchmark timeout in seconds",
+    )
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:

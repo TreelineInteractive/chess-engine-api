@@ -1,29 +1,29 @@
 # FastAPI and ASGI server
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
 
 # Chess libraries
 python-chess==1.999
-stockfish==3.28.0
+stockfish==4.0.5
 
 # Data validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic==2.10.3
+pydantic-settings==2.7.0
 
 # Environment management
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # Testing
-pytest==7.4.4
-pytest-asyncio==0.23.3
-pytest-cov==4.1.0
-httpx==0.26.0
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+httpx==0.28.1
 
 # Logging and monitoring
-structlog==24.1.0
+structlog==24.4.0
 
 # Rate limiting
 slowapi==0.1.9
 
 # Health checks (for Docker)
-requests==2.31.0
+requests==2.32.3

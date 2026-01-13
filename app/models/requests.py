@@ -176,7 +176,9 @@ class AnalyzePositionRequest(BaseModel):
     fen: str = Field(
         ...,
         description="FEN string representing the chess position",
-        examples=["r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"],
+        examples=[
+            "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4"
+        ],
     )
     depth: Optional[int] = Field(
         default=None,
@@ -238,6 +240,170 @@ class ValidateFenRequest(BaseModel):
         ...,
         description="FEN string to validate",
         examples=["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"],
+    )
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen_not_empty(cls, v: str) -> str:
+        """Validate FEN is not empty."""
+        if not v or not v.strip():
+            raise ValueError("FEN string cannot be empty")
+        return v.strip()
+
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class WDLStatsRequest(BaseModel):
+    """Request model for WDL (Win/Draw/Loss) statistics."""
+
+    fen: str = Field(
+        ...,
+        description="FEN string of the position to evaluate",
+        examples=["rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"],
+    )
+    depth: int = Field(
+        default=15,
+        ge=1,
+        le=25,
+        description="Analysis depth (1-25)",
+    )
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen_not_empty(cls, v: str) -> str:
+        """Validate FEN is not empty and normalize startpos."""
+        if not v or not v.strip():
+            raise ValueError("FEN string cannot be empty")
+        v = v.strip()
+        # Normalize "startpos" to starting position FEN
+        if v.lower() == "startpos":
+            return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        return v
+
+
+class PerftRequest(BaseModel):
+    """Request model for perft (performance test)."""
+
+    fen: str = Field(
+        default="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        description="FEN string or 'startpos' for starting position",
+        examples=[
+            "startpos",
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        ],
+    )
+    depth: int = Field(
+        ...,
+        ge=1,
+        le=7,
+        description="Depth to search (1-7, higher is exponentially slower)",
+    )
+    divide: bool = Field(
+        default=False,
+        description="Return per-move node counts",
+    )
+
+    @field_validator("fen")
+    @classmethod
+    def validate_fen(cls, v: str) -> str:
+        """Validate and normalize FEN."""
+        if not v or not v.strip():
+            raise ValueError("FEN string cannot be empty")
+        v = v.strip()
+        if v.lower() == "startpos":
+            return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        return v
+
+
+class EngineConfigRequest(BaseModel):
+    """Request model for engine configuration updates."""
+
+    threads: Optional[int] = Field(
+        None,
+        ge=1,
+        le=512,
+        description="Number of CPU threads to use",
+    )
+    hash_mb: Optional[int] = Field(
+        None,
+        ge=1,
+        le=131072,
+        description="Hash table size in megabytes",
+    )
+    skill_level: Optional[int] = Field(
+        None,
+        ge=0,
+        le=20,
+        description="Skill level (0=weakest, 20=strongest)",
+    )
+    uci_limit_strength: Optional[bool] = Field(
+        None,
+        description="Enable strength limiting (use with uci_elo)",
+    )
+    uci_elo: Optional[int] = Field(
+        None,
+        ge=1350,
+        le=2850,
+        description="Target Elo rating when strength limiting is enabled",
+    )
+    ponder: Optional[bool] = Field(
+        None,
+        description="Think on opponent's time",
+    )
+    multi_pv: Optional[int] = Field(
+        None,
+        ge=1,
+        le=500,
+        description="Number of principal variations to calculate",
+    )
+    uci_chess960: Optional[bool] = Field(
+        None,
+        description="Enable Chess960 (Fischer Random Chess) mode",
+    )
+
+
+class OpeningBookRequest(BaseModel):
+    """Request model for opening book lookup."""
+
+    moves: list[str] = Field(
+        ...,
+        description="List of moves in UCI notation",
+        examples=[["e2e4", "e7e5", "g1f3", "b8c6", "f1c4"]],
+        min_length=1,
+    )
+    starting_fen: str = Field(
+        default="rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        description="Starting position FEN. Defaults to standard starting position.",
+    )
+
+    @field_validator("starting_fen")
+    @classmethod
+    def validate_fen_not_empty(cls, v: str) -> str:
+        """Validate FEN is not empty and normalize startpos."""
+        if not v or not v.strip():
+            raise ValueError("FEN string cannot be empty")
+        v = v.strip()
+        if v.lower() == "startpos":
+            return "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+        return v
+
+    @field_validator("moves")
+    @classmethod
+    def validate_moves_not_empty(cls, v: list[str]) -> list[str]:
+        """Validate moves list is not empty."""
+        if not v:
+            raise ValueError("Moves list cannot be empty")
+        return [move.strip().lower() for move in v]
+
+
+class TablebaseProbeRequest(BaseModel):
+    """Request model for tablebase probe."""
+
+    fen: str = Field(
+        ...,
+        description="FEN string of endgame position (7 or fewer pieces)",
+        examples=["8/8/8/8/8/4k3/8/4K2R w - - 0 1"],
     )
 
     @field_validator("fen")

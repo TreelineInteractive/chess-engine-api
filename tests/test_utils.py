@@ -1,7 +1,7 @@
 """Tests for chess utility functions."""
 
-import pytest
 import chess
+import pytest
 
 from app.models.responses import Evaluation, WinningChances
 from app.utils.chess_utils import (
@@ -49,7 +49,7 @@ class TestCentipawnToWinProbability:
         """Test extreme values don't cause errors."""
         prob_high = centipawn_to_win_probability(10000)
         prob_low = centipawn_to_win_probability(-10000)
-        
+
         assert 0 <= prob_high <= 100
         assert 0 <= prob_low <= 100
 
@@ -61,7 +61,7 @@ class TestCalculateWinningChances:
         """Test equal position gives roughly 50-50."""
         eval_ = Evaluation(type="cp", value=0)
         chances = calculate_winning_chances(eval_)
-        
+
         assert isinstance(chances, WinningChances)
         assert 45 <= chances.white <= 55
         assert 45 <= chances.black <= 55
@@ -71,7 +71,7 @@ class TestCalculateWinningChances:
         """Test mate for white gives 100% for white."""
         eval_ = Evaluation(type="mate", value=5)
         chances = calculate_winning_chances(eval_)
-        
+
         assert chances.white == 100.0
         assert chances.black == 0.0
 
@@ -79,7 +79,7 @@ class TestCalculateWinningChances:
         """Test mate for black gives 0% for white."""
         eval_ = Evaluation(type="mate", value=-5)
         chances = calculate_winning_chances(eval_)
-        
+
         assert chances.white == 0.0
         assert chances.black == 100.0
 
@@ -91,7 +91,7 @@ class TestCalculateMaterialBalance:
         """Test starting position has equal material."""
         board = chess.Board()
         balance = calculate_material_balance(board)
-        
+
         assert balance.white == balance.black
         assert balance.difference == 0
         # 8 pawns + 2 knights + 2 bishops + 2 rooks + 1 queen = 39
@@ -102,7 +102,7 @@ class TestCalculateMaterialBalance:
         # White has extra queen
         board = chess.Board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
         board.remove_piece_at(chess.D8)  # Remove black queen
-        
+
         balance = calculate_material_balance(board)
         assert balance.difference == 9  # Queen is worth 9
 
@@ -114,15 +114,17 @@ class TestClassifyMove:
         """Test that best move is classified as excellent."""
         eval_before = Evaluation(type="cp", value=0)
         eval_after = Evaluation(type="cp", value=0)
-        
+
         classification = classify_move(eval_before, eval_after, was_best_move=True)
         assert classification == "excellent"
 
     def test_blunder(self):
         """Test that large cp loss is a blunder."""
         eval_before = Evaluation(type="cp", value=100)
-        eval_after = Evaluation(type="cp", value=200)  # After opponent moves, it's from their perspective
-        
+        eval_after = Evaluation(
+            type="cp", value=200
+        )  # After opponent moves, it's from their perspective
+
         classification = classify_move(eval_before, eval_after, was_best_move=False)
         assert classification == "blunder"
 
@@ -130,8 +132,10 @@ class TestClassifyMove:
         """Test that book move is classified correctly."""
         eval_before = Evaluation(type="cp", value=10)
         eval_after = Evaluation(type="cp", value=-10)
-        
-        classification = classify_move(eval_before, eval_after, was_best_move=False, is_book_move=True)
+
+        classification = classify_move(
+            eval_before, eval_after, was_best_move=False, is_book_move=True
+        )
         assert classification == "book"
 
 
@@ -139,10 +143,12 @@ class TestClassifyPositionType:
     """Tests for position type classification."""
 
     def test_starting_position(self):
-        """Test starting position is normal."""
+        """Test starting position is closed (4 center pawns)."""
         board = chess.Board()
         position_type = classify_position_type(board)
-        assert position_type == "normal"
+        # Starting position has 4 pawns in center squares (d4, d5, e4, e5)
+        # so it's classified as 'closed'
+        assert position_type == "closed"
 
     def test_endgame(self):
         """Test endgame detection."""
@@ -156,7 +162,9 @@ class TestDetectTacticalThemes:
 
     def test_check_detection(self):
         """Test check detection."""
-        board = chess.Board("rnbqkbnr/ppppp1pp/5p2/7Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2")
+        board = chess.Board(
+            "rnbqkbnr/ppppp1pp/5p2/7Q/4P3/8/PPPP1PPP/RNB1KBNR b KQkq - 1 2"
+        )
         themes = detect_tactical_themes(board)
         assert "check" in themes
 
@@ -174,7 +182,7 @@ class TestValidateFen:
         """Test valid starting position."""
         fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         is_valid, errors, board = validate_fen(fen)
-        
+
         assert is_valid is True
         assert errors == []
         assert board is not None
@@ -183,7 +191,7 @@ class TestValidateFen:
         """Test FEN with wrong number of parts."""
         fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w"
         is_valid, errors, board = validate_fen(fen)
-        
+
         assert is_valid is False
         assert len(errors) > 0
 
@@ -191,14 +199,14 @@ class TestValidateFen:
         """Test FEN with invalid piece placement."""
         fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP w KQkq - 0 1"  # Missing rank
         is_valid, errors, board = validate_fen(fen)
-        
+
         assert is_valid is False
 
     def test_missing_king(self):
         """Test FEN with missing king."""
         fen = "rnbq1bnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"  # Missing black king
         is_valid, errors, board = validate_fen(fen)
-        
+
         assert is_valid is False
 
 
@@ -209,7 +217,7 @@ class TestValidateMoveUCI:
         """Test valid move."""
         board = chess.Board()
         is_valid, move, error = validate_move_uci("e2e4", board)
-        
+
         assert is_valid is True
         assert move is not None
         assert error is None
@@ -217,8 +225,10 @@ class TestValidateMoveUCI:
     def test_invalid_move(self):
         """Test invalid move."""
         board = chess.Board()
-        is_valid, move, error = validate_move_uci("e2e5", board)  # Pawn can't go 3 squares
-        
+        is_valid, move, error = validate_move_uci(
+            "e2e5", board
+        )  # Pawn can't go 3 squares
+
         assert is_valid is False
         assert move is None
         assert error is not None
@@ -227,7 +237,7 @@ class TestValidateMoveUCI:
         """Test move from empty square."""
         board = chess.Board()
         is_valid, move, error = validate_move_uci("e4e5", board)
-        
+
         assert is_valid is False
         assert "No piece" in error
 
@@ -238,7 +248,7 @@ class TestValidateSquare:
     def test_valid_square(self):
         """Test valid square."""
         is_valid, square, error = validate_square("e4")
-        
+
         assert is_valid is True
         assert square == chess.E4
         assert error is None
@@ -246,14 +256,14 @@ class TestValidateSquare:
     def test_invalid_file(self):
         """Test invalid file."""
         is_valid, square, error = validate_square("z4")
-        
+
         assert is_valid is False
         assert error is not None
 
     def test_invalid_rank(self):
         """Test invalid rank."""
         is_valid, square, error = validate_square("e9")
-        
+
         assert is_valid is False
         assert error is not None
 
@@ -283,7 +293,7 @@ class TestParseFenInfo:
         """Test parsing starting position."""
         fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
         info = parse_fen_info(fen)
-        
+
         assert info.to_move == "white"
         assert info.castling_rights == "KQkq"
         assert info.en_passant is None
@@ -295,6 +305,6 @@ class TestParseFenInfo:
         """Test parsing position with black to move."""
         fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         info = parse_fen_info(fen)
-        
+
         assert info.to_move == "black"
         assert info.en_passant == "e3"

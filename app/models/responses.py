@@ -497,3 +497,115 @@ class AnalysisResult(BaseModel):
     nodes: Optional[int] = None
     time_ms: Optional[int] = None
     mate_in: Optional[int] = None
+
+
+class WDLStats(BaseModel):
+    """Win/Draw/Loss probability statistics."""
+
+    win: float = Field(..., description="Probability of white winning (0-100)")
+    draw: float = Field(..., description="Probability of draw (0-100)")
+    loss: float = Field(..., description="Probability of black winning (0-100)")
+
+
+class WDLStatsResponse(BaseModel):
+    """Response model for WDL statistics."""
+
+    wdl: WDLStats = Field(..., description="Win/Draw/Loss probabilities")
+    evaluation: Evaluation = Field(..., description="Position evaluation")
+    depth: int = Field(..., description="Analysis depth used")
+    model: str = Field(
+        default="Lichess formula",
+        description="WDL calculation model used",
+    )
+    fen: str = Field(..., description="Position FEN")
+
+
+class PerftResponse(BaseModel):
+    """Response model for perft test."""
+
+    nodes: int = Field(..., description="Total number of leaf nodes")
+    depth: int = Field(..., description="Depth searched")
+    time_ms: int = Field(..., description="Time taken in milliseconds")
+    nps: int = Field(..., description="Nodes per second")
+    fen: str = Field(..., description="Position FEN")
+    divide: Optional[dict[str, int]] = Field(
+        None,
+        description="Per-move node counts (only if divide=true)",
+    )
+
+
+class BenchmarkResponse(BaseModel):
+    """Response model for benchmark test."""
+
+    total_nodes: int = Field(
+        ..., description="Total nodes searched across all positions"
+    )
+    nodes_per_second: int = Field(..., description="Average nodes per second")
+    time_ms: int = Field(..., description="Total time in milliseconds")
+    positions_tested: int = Field(
+        ..., description="Number of positions in benchmark suite"
+    )
+    depth: int = Field(..., description="Depth used for benchmark")
+    threads: int = Field(..., description="Number of threads used")
+    hash_mb: int = Field(..., description="Hash table size in MB")
+    signature: str = Field(
+        ..., description="Benchmark signature for version verification"
+    )
+
+
+class EngineConfigResponse(BaseModel):
+    """Response model for engine configuration updates."""
+
+    updated_parameters: dict[str, Any] = Field(
+        ...,
+        description="Parameters that were updated",
+    )
+    current_configuration: dict[str, Any] = Field(
+        ...,
+        description="Full current engine configuration",
+    )
+    restart_required: bool = Field(
+        default=False,
+        description="Whether engine restart is needed",
+    )
+
+
+class OpeningBookResponse(BaseModel):
+    """Response model for opening book lookup."""
+
+    opening_name: str = Field(..., description="Name of the opening")
+    eco: str = Field(..., description="ECO code (e.g., C50)")
+    variation: Optional[str] = Field(None, description="Specific variation name")
+    popularity: str = Field(
+        ...,
+        description="Popularity level: very common, common, uncommon, rare, not in book",
+    )
+    theory_moves: list[str] = Field(
+        ..., description="Common theoretical continuation moves"
+    )
+    known_until_move: int = Field(
+        ...,
+        description="Move number until which opening is identified",
+    )
+    in_book: bool = Field(..., description="Whether position is in opening book")
+    fen: str = Field(..., description="Resulting FEN after all moves")
+
+
+class TablebaseProbeResponse(BaseModel):
+    """Response model for tablebase probe."""
+
+    wdl: Literal["win", "draw", "loss", "unknown"] = Field(
+        ...,
+        description="Win/Draw/Loss result",
+    )
+    dtz: Optional[int] = Field(
+        None, description="Distance to zeroing move (50-move rule)"
+    )
+    dtm: Optional[int] = Field(None, description="Distance to mate (if available)")
+    best_move: Optional[str] = Field(None, description="Best move in UCI notation")
+    category: Literal["tablebase", "not_in_tablebase"] = Field(
+        ...,
+        description="Whether position was found in tablebase",
+    )
+    pieces: int = Field(..., description="Number of pieces on board")
+    fen: str = Field(..., description="Position FEN")
