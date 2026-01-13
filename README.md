@@ -17,7 +17,7 @@ A production-ready REST API service that wraps the Stockfish chess engine, provi
 - 🎮 **Game Analysis** - Analyze complete games with accuracy scores
 - 🔍 **FEN Validation** - Validate FEN strings with error details
 - 📈 **WDL Statistics** - Win/Draw/Loss probabilities using Lichess formula
-- 📚 **Opening Book** - ECO code and opening identification
+- 📚 **Opening Book** - 3,630+ openings from Lichess with ECO codes, variations, and popularity ratings
 - ⚡ **Perft Testing** - Performance testing for move generation
 - 🏆 **Benchmarking** - Engine performance measurement
 - ⚙️ **Engine Configuration** - Runtime UCI parameter updates
