@@ -159,6 +159,18 @@ POLICY_DOCUMENT=$(cat <<EOF
         "iam:PassRole"
       ],
       "Resource": "arn:aws:iam::*:role/AppRunnerECRAccessRole"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateServiceLinkedRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/aws-service-role/apprunner.amazonaws.com/AWSServiceRoleForAppRunner",
+      "Condition": {
+        "StringLike": {
+          "iam:AWSServiceName": "apprunner.amazonaws.com"
+        }
+      }
     }
   ]
 }
