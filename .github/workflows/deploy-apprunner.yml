@@ -32,6 +32,13 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: GitHubActions-AppRunner-Deploy
+        continue-on-error: false
+        
+      - name: Verify AWS credentials
+        run: |
+          echo "Testing AWS credentials..."
+          aws sts get-caller-identity
+          echo "✅ Successfully authenticated to AWS"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -46,13 +53,22 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
+          # Check if latest image exists for caching
+          if docker manifest inspect $ECR_REGISTRY/$ECR_REPOSITORY:latest >/dev/null 2>&1; then
+            echo "Using cache from latest image"
+            CACHE_FROM="--cache-from type=registry,ref=$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          else
+            echo "No cache available (first build)"
+            CACHE_FROM=""
+          fi
+          
           # Build and push Docker image
           docker buildx build \
             --platform linux/amd64 \
             --push \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
             --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
-            --cache-from type=registry,ref=$ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            $CACHE_FROM \
             --cache-to type=inline \
             .
           
