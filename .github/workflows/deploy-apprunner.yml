@@ -1,0 +1,378 @@
+name: Deploy to AWS App Runner
+
+on:
+  push:
+    branches:
+      - main
+      - madkins/deploy
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REPOSITORY: chess-engine-api
+  APP_RUNNER_SERVICE_NAME: chess-engine-api
+  DOMAIN_NAME: chessengine.treelineint.click
+
+permissions:
+  id-token: write   # Required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to App Runner
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-AppRunner-Deploy
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build and push Docker image
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
+            --tag $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --cache-from type=registry,ref=$ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            --cache-to type=inline \
+            .
+          
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "::notice::Image pushed to $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Check if App Runner service exists
+        id: check-service
+        run: |
+          if aws apprunner list-services --region ${{ env.AWS_REGION }} \
+              --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE_NAME }}'].ServiceArn" \
+              --output text | grep -q .; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            SERVICE_ARN=$(aws apprunner list-services --region ${{ env.AWS_REGION }} \
+              --query "ServiceSummaryList[?ServiceName=='${{ env.APP_RUNNER_SERVICE_NAME }}'].ServiceArn" \
+              --output text)
+            echo "service_arn=$SERVICE_ARN" >> $GITHUB_OUTPUT
+            echo "::notice::Service exists: $SERVICE_ARN"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "::notice::Service does not exist, will create new service"
+          fi
+
+      - name: Create App Runner service
+        if: steps.check-service.outputs.exists == 'false'
+        id: create-service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Creating new App Runner service..."
+          
+          SERVICE_ARN=$(aws apprunner create-service \
+            --service-name ${{ env.APP_RUNNER_SERVICE_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "'"$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"'",
+                "ImageRepositoryType": "ECR",
+                "ImageConfiguration": {
+                  "Port": "8000",
+                  "RuntimeEnvironmentVariables": {
+                    "STOCKFISH_PATH": "/usr/local/bin/stockfish",
+                    "STOCKFISH_THREADS": "2",
+                    "STOCKFISH_HASH_SIZE_MB": "256",
+                    "STOCKFISH_SKILL_LEVEL": "20",
+                    "MAX_DEPTH": "25",
+                    "DEFAULT_DEPTH": "15",
+                    "MAX_ANALYSIS_TIME_MS": "10000",
+                    "MAX_MULTI_PV": "5",
+                    "API_VERSION": "1.0.0",
+                    "API_RATE_LIMIT_PER_MINUTE": "100",
+                    "MAX_CONCURRENT_ANALYSES": "10",
+                    "HOST": "0.0.0.0",
+                    "PORT": "8000",
+                    "DEBUG": "false",
+                    "CORS_ORIGINS": "*",
+                    "LOG_LEVEL": "INFO",
+                    "LOG_FORMAT": "json"
+                  }
+                }
+              },
+              "AutoDeploymentsEnabled": false,
+              "AuthenticationConfiguration": {
+                "AccessRoleArn": "'"${{ secrets.APP_RUNNER_ACCESS_ROLE_ARN }}"'"
+              }
+            }' \
+            --instance-configuration '{
+              "Cpu": "1 vCPU",
+              "Memory": "2 GB"
+            }' \
+            --health-check-configuration '{
+              "Protocol": "HTTP",
+              "Path": "/api/v1/health",
+              "Interval": 10,
+              "Timeout": 5,
+              "HealthyThreshold": 1,
+              "UnhealthyThreshold": 5
+            }' \
+            --network-configuration '{
+              "EgressConfiguration": {
+                "EgressType": "DEFAULT"
+              }
+            }' \
+            --tags Key=Environment,Value=production Key=ManagedBy,Value=GitHub \
+            --query 'Service.ServiceArn' \
+            --output text)
+          
+          echo "service_arn=$SERVICE_ARN" >> $GITHUB_OUTPUT
+          echo "::notice::Created service: $SERVICE_ARN"
+
+      - name: Update App Runner service
+        if: steps.check-service.outputs.exists == 'true'
+        id: update-service
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          echo "Updating existing App Runner service..."
+          
+          aws apprunner update-service \
+            --service-arn ${{ steps.check-service.outputs.service_arn }} \
+            --region ${{ env.AWS_REGION }} \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "'"$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"'",
+                "ImageRepositoryType": "ECR",
+                "ImageConfiguration": {
+                  "Port": "8000",
+                  "RuntimeEnvironmentVariables": {
+                    "STOCKFISH_PATH": "/usr/local/bin/stockfish",
+                    "STOCKFISH_THREADS": "2",
+                    "STOCKFISH_HASH_SIZE_MB": "256",
+                    "STOCKFISH_SKILL_LEVEL": "20",
+                    "MAX_DEPTH": "25",
+                    "DEFAULT_DEPTH": "15",
+                    "MAX_ANALYSIS_TIME_MS": "10000",
+                    "MAX_MULTI_PV": "5",
+                    "API_VERSION": "1.0.0",
+                    "API_RATE_LIMIT_PER_MINUTE": "100",
+                    "MAX_CONCURRENT_ANALYSES": "10",
+                    "HOST": "0.0.0.0",
+                    "PORT": "8000",
+                    "DEBUG": "false",
+                    "CORS_ORIGINS": "*",
+                    "LOG_LEVEL": "INFO",
+                    "LOG_FORMAT": "json"
+                  }
+                }
+              },
+              "AutoDeploymentsEnabled": false,
+              "AuthenticationConfiguration": {
+                "AccessRoleArn": "'"${{ secrets.APP_RUNNER_ACCESS_ROLE_ARN }}"'"
+              }
+            }' \
+            --instance-configuration '{
+              "Cpu": "1 vCPU",
+              "Memory": "2 GB"
+            }' \
+            --health-check-configuration '{
+              "Protocol": "HTTP",
+              "Path": "/api/v1/health",
+              "Interval": 10,
+              "Timeout": 5,
+              "HealthyThreshold": 1,
+              "UnhealthyThreshold": 5
+            }'
+          
+          echo "::notice::Updated service: ${{ steps.check-service.outputs.service_arn }}"
+
+      - name: Wait for deployment to complete
+        run: |
+          SERVICE_ARN="${{ steps.create-service.outputs.service_arn || steps.check-service.outputs.service_arn }}"
+          echo "Waiting for service to be running..."
+          
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            STATUS=$(aws apprunner describe-service \
+              --service-arn "$SERVICE_ARN" \
+              --region ${{ env.AWS_REGION }} \
+              --query 'Service.Status' \
+              --output text)
+            
+            echo "Current status: $STATUS (attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS)"
+            
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "::notice::Service is running!"
+              break
+            elif [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then
+              echo "::error::Service deployment failed with status: $STATUS"
+              exit 1
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 10
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "::error::Timeout waiting for service to be running"
+            exit 1
+          fi
+
+      - name: Get service URL
+        id: get-url
+        run: |
+          SERVICE_ARN="${{ steps.create-service.outputs.service_arn || steps.check-service.outputs.service_arn }}"
+          SERVICE_URL=$(aws apprunner describe-service \
+            --service-arn "$SERVICE_ARN" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Service.ServiceUrl' \
+            --output text)
+          
+          echo "url=https://$SERVICE_URL" >> $GITHUB_OUTPUT
+          echo "::notice::Service URL: https://$SERVICE_URL"
+
+      - name: Configure custom domain
+        id: configure-domain
+        run: |
+          SERVICE_ARN="${{ steps.create-service.outputs.service_arn || steps.check-service.outputs.service_arn }}"
+          
+          echo "Checking if custom domain is already associated..."
+          EXISTING_DOMAIN=$(aws apprunner list-custom-domains \
+            --service-arn "$SERVICE_ARN" \
+            --region ${{ env.AWS_REGION }} \
+            --query "CustomDomainList[?DomainName=='${{ env.DOMAIN_NAME }}'].DomainName" \
+            --output text || echo "")
+          
+          if [ -z "$EXISTING_DOMAIN" ]; then
+            echo "Associating custom domain..."
+            aws apprunner associate-custom-domain \
+              --service-arn "$SERVICE_ARN" \
+              --domain-name ${{ env.DOMAIN_NAME }} \
+              --region ${{ env.AWS_REGION }}
+            
+            echo "::notice::Custom domain associated. Waiting for DNS validation..."
+            
+            # Get validation records
+            VALIDATION_RECORDS=$(aws apprunner describe-custom-domains \
+              --service-arn "$SERVICE_ARN" \
+              --domain-name ${{ env.DOMAIN_NAME }} \
+              --region ${{ env.AWS_REGION }} \
+              --query 'CustomDomains[0].CertificateValidationRecords')
+            
+            echo "::notice::DNS validation records: $VALIDATION_RECORDS"
+            echo "validation_records=$VALIDATION_RECORDS" >> $GITHUB_OUTPUT
+          else
+            echo "::notice::Custom domain already associated"
+          fi
+
+      - name: Update Route 53 DNS records
+        run: |
+          SERVICE_ARN="${{ steps.create-service.outputs.service_arn || steps.check-service.outputs.service_arn }}"
+          
+          # Get the App Runner service URL for CNAME
+          SERVICE_URL=$(aws apprunner describe-service \
+            --service-arn "$SERVICE_ARN" \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Service.ServiceUrl' \
+            --output text)
+          
+          # Get hosted zone ID for treelineint.click
+          HOSTED_ZONE_ID=$(aws route53 list-hosted-zones \
+            --query "HostedZones[?Name=='treelineint.click.'].Id" \
+            --output text | cut -d'/' -f3)
+          
+          echo "Hosted Zone ID: $HOSTED_ZONE_ID"
+          
+          # Check if DNS record already exists
+          EXISTING_RECORD=$(aws route53 list-resource-record-sets \
+            --hosted-zone-id "$HOSTED_ZONE_ID" \
+            --query "ResourceRecordSets[?Name=='${{ env.DOMAIN_NAME }}.'].Name" \
+            --output text || echo "")
+          
+          ACTION="UPSERT"
+          
+          # Create or update CNAME record
+          cat > /tmp/dns-change.json <<EOF
+          {
+            "Changes": [{
+              "Action": "$ACTION",
+              "ResourceRecordSet": {
+                "Name": "${{ env.DOMAIN_NAME }}",
+                "Type": "CNAME",
+                "TTL": 300,
+                "ResourceRecords": [{
+                  "Value": "$SERVICE_URL"
+                }]
+              }
+            }]
+          }
+          EOF
+          
+          aws route53 change-resource-record-sets \
+            --hosted-zone-id "$HOSTED_ZONE_ID" \
+            --change-batch file:///tmp/dns-change.json
+          
+          echo "::notice::DNS record ${ACTION}D for ${{ env.DOMAIN_NAME }} -> $SERVICE_URL"
+
+      - name: Health check
+        run: |
+          SERVICE_URL="${{ steps.get-url.outputs.url }}"
+          echo "Running health check against $SERVICE_URL/api/v1/health"
+          
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if curl -f -s "$SERVICE_URL/api/v1/health" > /dev/null; then
+              echo "::notice::Health check passed!"
+              curl -s "$SERVICE_URL/api/v1/health" | jq '.' || true
+              break
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Health check attempt $ATTEMPT/$MAX_ATTEMPTS failed, retrying in 10s..."
+            sleep 10
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "::warning::Health check did not pass within timeout period"
+          fi
+
+      - name: Deployment summary
+        run: |
+          SERVICE_ARN="${{ steps.create-service.outputs.service_arn || steps.check-service.outputs.service_arn }}"
+          SERVICE_URL="${{ steps.get-url.outputs.url }}"
+          
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully deployed to AWS App Runner" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service ARN**: \`$SERVICE_ARN\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Service URL**: $SERVICE_URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Custom Domain**: https://${{ env.DOMAIN_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ steps.build-image.outputs.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Health Check" >> $GITHUB_STEP_SUMMARY
+          echo "- $SERVICE_URL/api/v1/health" >> $GITHUB_STEP_SUMMARY
+          echo "- https://${{ env.DOMAIN_NAME }}/api/v1/health" >> $GITHUB_STEP_SUMMARY

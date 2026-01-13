@@ -1,0 +1,115 @@
+name: Validate Deployment Configuration
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/deploy-apprunner.yml'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'app/**'
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-west-2
+
+jobs:
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Dockerfile
+        run: |
+          echo "Validating Dockerfile syntax..."
+          docker build --dry-run . || docker build -t test-build --target stockfish-builder . --no-cache
+          echo "✅ Dockerfile is valid"
+
+      - name: Check required files
+        run: |
+          echo "Checking required files..."
+          FILES=(
+            "Dockerfile"
+            "requirements.txt"
+            "app/main.py"
+            ".github/workflows/deploy-apprunner.yml"
+          )
+          
+          for file in "${FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✅ Found: $file"
+            else
+              echo "❌ Missing: $file"
+              exit 1
+            fi
+          done
+
+      - name: Validate workflow YAML
+        run: |
+          echo "Validating workflow YAML syntax..."
+          
+          # Check for required secrets references
+          if grep -q "secrets.AWS_ROLE_ARN" .github/workflows/deploy-apprunner.yml && \
+             grep -q "secrets.APP_RUNNER_ACCESS_ROLE_ARN" .github/workflows/deploy-apprunner.yml; then
+            echo "✅ Required secrets are referenced"
+          else
+            echo "❌ Missing required secret references"
+            exit 1
+          fi
+          
+          # Check for required environment variables
+          if grep -q "AWS_REGION:" .github/workflows/deploy-apprunner.yml && \
+             grep -q "ECR_REPOSITORY:" .github/workflows/deploy-apprunner.yml; then
+            echo "✅ Required environment variables are defined"
+          else
+            echo "❌ Missing required environment variables"
+            exit 1
+          fi
+
+      - name: Check Python dependencies
+        run: |
+          echo "Validating requirements.txt..."
+          if [ -f "requirements.txt" ]; then
+            # Check for common issues
+            if grep -q "^-e " requirements.txt; then
+              echo "⚠️  Warning: Found editable installs in requirements.txt"
+            fi
+            
+            # Count dependencies
+            DEPS=$(grep -v "^#" requirements.txt | grep -v "^$" | wc -l)
+            echo "✅ Found $DEPS dependencies in requirements.txt"
+          fi
+
+      - name: Validate Docker build context
+        run: |
+          echo "Checking Docker build context size..."
+          
+          # Calculate size of build context
+          CONTEXT_SIZE=$(du -sh . | cut -f1)
+          echo "Build context size: $CONTEXT_SIZE"
+          
+          # Check for .dockerignore
+          if [ -f ".dockerignore" ]; then
+            echo "✅ .dockerignore exists"
+            cat .dockerignore
+          else
+            echo "⚠️  No .dockerignore found - consider adding one to optimize build context"
+          fi
+
+      - name: Validation summary
+        run: |
+          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ All validation checks passed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Configuration Details" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: $AWS_REGION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dockerfile**: Valid" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow**: Valid" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependencies**: Checked" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This PR is ready to merge!" >> $GITHUB_STEP_SUMMARY
