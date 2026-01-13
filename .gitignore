@@ -120,3 +120,4 @@ logs/
 
 # GitHub workflows - credentials
 .github/workflows/test-aws-connectivity.sh
+openings_*.tsv

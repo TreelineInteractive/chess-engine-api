@@ -1,6 +1,8 @@
 """Opening book service for chess opening identification."""
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 import chess
@@ -8,186 +10,116 @@ import chess
 logger = logging.getLogger(__name__)
 
 
-# Simplified opening database with ECO codes
-# In production, this would be loaded from a comprehensive database file
-OPENING_DATABASE = {
-    # Popular openings
-    ("e2e4",): {
-        "name": "King's Pawn Opening",
-        "eco": "B00",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["e7e5", "c7c5", "e7e6", "c7c6", "d7d6"],
-    },
-    ("e2e4", "e7e5"): {
-        "name": "King's Pawn Game",
-        "eco": "C20",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["g1f3", "f1c4", "d2d4", "f2f4"],
-    },
-    ("e2e4", "e7e5", "g1f3"): {
-        "name": "King's Knight Opening",
-        "eco": "C40",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["b8c6", "g8f6", "d7d6"],
-    },
-    ("e2e4", "e7e5", "g1f3", "b8c6"): {
-        "name": "King's Knight Opening",
-        "eco": "C44",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["f1c4", "f1b5", "d2d4"],
-    },
-    ("e2e4", "e7e5", "g1f3", "b8c6", "f1c4"): {
-        "name": "Italian Game",
-        "eco": "C50",
-        "variation": "Giuoco Piano",
-        "popularity": "very common",
-        "theory_moves": ["f8c5", "g8f6"],
-    },
-    ("e2e4", "e7e5", "g1f3", "b8c6", "f1b5"): {
-        "name": "Ruy Lopez",
-        "eco": "C60",
-        "variation": "Spanish Opening",
-        "popularity": "very common",
-        "theory_moves": ["a7a6", "g8f6", "f8c5"],
-    },
-    ("e2e4", "c7c5"): {
-        "name": "Sicilian Defense",
-        "eco": "B20",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["g1f3", "b1c3"],
-    },
-    ("e2e4", "c7c5", "g1f3"): {
-        "name": "Sicilian Defense",
-        "eco": "B20",
-        "variation": "Open Sicilian",
-        "popularity": "very common",
-        "theory_moves": ["d7d6", "b8c6", "e7e6"],
-    },
-    ("e2e4", "c7c5", "g1f3", "d7d6"): {
-        "name": "Sicilian Defense",
-        "eco": "B50",
-        "variation": "Modern Variations",
-        "popularity": "very common",
-        "theory_moves": ["d2d4", "f1c4"],
-    },
-    ("e2e4", "c7c5", "g1f3", "d7d6", "d2d4"): {
-        "name": "Sicilian Defense",
-        "eco": "B50",
-        "variation": "Open Sicilian",
-        "popularity": "very common",
-        "theory_moves": ["c5d4", "g8f6"],
-    },
-    ("e2e4", "e7e6"): {
-        "name": "French Defense",
-        "eco": "C00",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["d2d4", "g1f3"],
-    },
-    ("e2e4", "c7c6"): {
-        "name": "Caro-Kann Defense",
-        "eco": "B10",
-        "variation": None,
-        "popularity": "common",
-        "theory_moves": ["d2d4", "b1c3"],
-    },
-    ("d2d4",): {
-        "name": "Queen's Pawn Opening",
-        "eco": "A40",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["d7d5", "g8f6", "e7e6"],
-    },
-    ("d2d4", "d7d5"): {
-        "name": "Queen's Pawn Game",
-        "eco": "D00",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["c2c4", "g1f3", "e2e3"],
-    },
-    ("d2d4", "d7d5", "c2c4"): {
-        "name": "Queen's Gambit",
-        "eco": "D06",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["d5c4", "e7e6", "c7c6"],
-    },
-    ("d2d4", "d7d5", "c2c4", "d5c4"): {
-        "name": "Queen's Gambit Accepted",
-        "eco": "D20",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["g1f3", "e2e4"],
-    },
-    ("d2d4", "d7d5", "c2c4", "e7e6"): {
-        "name": "Queen's Gambit Declined",
-        "eco": "D30",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["b1c3", "g1f3"],
-    },
-    ("d2d4", "g8f6"): {
-        "name": "Indian Defense",
-        "eco": "A45",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["c2c4", "g1f3"],
-    },
-    ("d2d4", "g8f6", "c2c4"): {
-        "name": "Indian Game",
-        "eco": "E00",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["e7e6", "g7g6"],
-    },
-    ("d2d4", "g8f6", "c2c4", "e7e6"): {
-        "name": "Indian Defense",
-        "eco": "E00",
-        "variation": None,
-        "popularity": "very common",
-        "theory_moves": ["b1c3", "g1f3"],
-    },
-    ("d2d4", "g8f6", "c2c4", "g7g6"): {
-        "name": "King's Indian Defense",
-        "eco": "E60",
-        "variation": None,
-        "popularity": "common",
-        "theory_moves": ["b1c3", "g1f3"],
-    },
-    ("c2c4",): {
-        "name": "English Opening",
-        "eco": "A10",
-        "variation": None,
-        "popularity": "common",
-        "theory_moves": ["e7e5", "g8f6", "c7c5"],
-    },
-    ("g1f3",): {
-        "name": "Zukertort Opening",
-        "eco": "A04",
-        "variation": None,
-        "popularity": "common",
-        "theory_moves": ["d7d5", "g8f6", "c7c5"],
-    },
-    ("e2e4", "d7d5"): {
-        "name": "Scandinavian Defense",
-        "eco": "B01",
-        "variation": "Center Counter Defense",
-        "popularity": "uncommon",
-        "theory_moves": ["e4d5", "d2d4"],
-    },
-    ("e2e4", "g8f6"): {
-        "name": "Alekhine's Defense",
-        "eco": "B02",
-        "variation": None,
-        "popularity": "uncommon",
-        "theory_moves": ["e4e5", "d2d4"],
-    },
-}
+# Load comprehensive opening book from JSON file
+def _load_opening_database() -> dict[tuple[str, ...], dict[str, Any]]:
+    """Load opening database from JSON file."""
+    try:
+        data_file = (
+            Path(__file__).parent.parent.parent
+            / "data"
+            / "openings"
+            / "opening_book.json"
+        )
+
+        if not data_file.exists():
+            logger.warning(f"Opening book file not found: {data_file}")
+            logger.warning("Using minimal fallback opening database")
+            return _get_fallback_database()
+
+        with open(data_file, "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+
+        # Convert string keys back to tuples
+        opening_db = {tuple(key.split(",")): value for key, value in json_data.items()}
+
+        logger.info(f"Loaded {len(opening_db)} openings from {data_file}")
+        return opening_db
+
+    except Exception as e:
+        logger.error(f"Failed to load opening book: {e}")
+        logger.warning("Using minimal fallback opening database")
+        return _get_fallback_database()
+
+
+def _get_fallback_database() -> dict[tuple[str, ...], dict[str, Any]]:
+    """Minimal fallback opening database for when JSON file is not available."""
+    return {
+        # Popular openings only
+        ("e2e4",): {
+            "name": "King's Pawn Opening",
+            "eco": "B00",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["e7e5", "c7c5", "e7e6", "c7c6", "d7d6"],
+        },
+        ("e2e4", "e7e5"): {
+            "name": "King's Pawn Game",
+            "eco": "C20",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["g1f3", "f1c4", "d2d4", "f2f4"],
+        },
+        ("e2e4", "e7e5", "g1f3"): {
+            "name": "King's Knight Opening",
+            "eco": "C40",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["b8c6", "g8f6", "d7d6"],
+        },
+        ("e2e4", "e7e5", "g1f3", "b8c6", "f1c4"): {
+            "name": "Italian Game",
+            "eco": "C50",
+            "variation": "Giuoco Piano",
+            "popularity": "very common",
+            "theory_moves": ["f8c5", "g8f6"],
+        },
+        ("e2e4", "e7e5", "g1f3", "b8c6", "f1b5"): {
+            "name": "Ruy Lopez",
+            "eco": "C60",
+            "variation": "Spanish Opening",
+            "popularity": "very common",
+            "theory_moves": ["a7a6", "g8f6", "f8c5"],
+        },
+        ("e2e4", "c7c5"): {
+            "name": "Sicilian Defense",
+            "eco": "B20",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["g1f3", "b1c3"],
+        },
+        ("d2d4",): {
+            "name": "Queen's Pawn Opening",
+            "eco": "A40",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["d7d5", "g8f6", "e7e6"],
+        },
+        ("d2d4", "d7d5"): {
+            "name": "Queen's Pawn Game",
+            "eco": "D00",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["c2c4", "g1f3", "e2e3"],
+        },
+        ("d2d4", "d7d5", "c2c4"): {
+            "name": "Queen's Gambit",
+            "eco": "D06",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["d5c4", "e7e6", "c7c6"],
+        },
+        ("d2d4", "g8f6"): {
+            "name": "Indian Defense",
+            "eco": "A45",
+            "variation": None,
+            "popularity": "very common",
+            "theory_moves": ["c2c4", "g1f3"],
+        },
+    }
+
+
+# Global opening database (loaded once at module import)
+OPENING_DATABASE = _load_opening_database()
 
 
 class OpeningService:
