@@ -22,6 +22,7 @@ A production-ready REST API service that wraps the Stockfish chess engine, provi
 - 🏆 **Benchmarking** - Engine performance measurement
 - ⚙️ **Engine Configuration** - Runtime UCI parameter updates
 - 🎲 **Tablebase Support** - Syzygy endgame tablebase probing
+- 🔐 **Optional Authentication** - JWT/JWKS support for Supabase and other providers
 - 🏗️ **Production Ready** - Docker containerized, horizontally scalable
 - 📚 **Auto Documentation** - OpenAPI/Swagger docs included
 - 🚀 **High Performance** - Async I/O, connection pooling
@@ -46,7 +47,22 @@ cd chess-engine-api
 docker compose up --build
 ```
 
-3. Access the API:
+3. **Configure authentication** (optional):
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your authentication settings
+# See AUTHENTICATION.md for detailed setup instructions
+# AUTH_ENABLED=true
+# JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
+# JWT_AUDIENCE=authenticated
+
+# Run with your configuration
+docker compose up
+```
+
+4. Access the API:
 - **API**: http://localhost:8000
 - **Documentation**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/api/v1/health
@@ -448,6 +464,65 @@ SYZYGY_PATH=              # Path to Syzygy tablebase files (leave empty if not u
 MAX_PERFT_DEPTH=6         # Maximum perft depth (1-7)
 BENCHMARK_TIMEOUT_SECONDS=60
 ```
+
+## Authentication (Optional)
+
+The API supports optional JWT authentication using JWKS (JSON Web Key Set) for token validation. This is disabled by default to keep the API open for public use, but can be enabled for production deployments requiring user authentication.
+
+**📖 For detailed authentication setup, testing, and integration instructions, see [AUTHENTICATION.md](./AUTHENTICATION.md)**
+
+### Quick Setup
+
+#### Supabase
+```bash
+AUTH_ENABLED=true
+JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
+JWT_AUDIENCE=authenticated
+```
+
+#### Auth0
+```bash
+AUTH_ENABLED=true
+JWKS_URL=https://your-domain.auth0.com/.well-known/jwks.json
+JWT_AUDIENCE=your-api-identifier
+```
+
+### Protected Endpoints
+
+When `AUTH_ENABLED=true`, all endpoints require a valid JWT token except:
+- `GET /api/v1/health` - Health check
+- `GET /api/v1/ready` - Readiness check
+
+Include the JWT token in requests:
+```bash
+curl -X POST https://api.example.com/api/v1/best-move \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fen": "startpos", "depth": 15}'
+```
+
+@router.post("/best-move")
+async def get_best_move(
+    request: BestMoveRequest,
+    service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
+) -> BestMoveResponse:
+    # When AUTH_ENABLED=false: user is None (no auth required)
+    # When AUTH_ENABLED=true: user contains JWT claims or raises 401
+    # You can optionally use user data for logging, rate limiting, etc.
+    return await service.get_best_move(...)
+```
+
+**Behavior:**
+- **AUTH_ENABLED=false**: User can access all endpoints without tokens, `user` parameter is None
+- **AUTH_ENABLED=true**: All endpoints require valid JWT token, `user` contains claims (sub, email, etc.), invalid/missing tokens return 401
+
+## Deployment
+
+For complete deployment guides including AWS App Runner (current setup), Docker Compose, and other cloud platforms, see:
+- **[AUTHENTICATION.md](./AUTHENTICATION.md)** - JWT authentication setup and testing
+- **[DEPLOYMENT-SETUP.md](./DEPLOYMENT-SETUP.md)** - AWS App Runner setup (current workflow)
+- **[ENV_SETUP.md](./ENV_SETUP.md)** - Quick environment variable reference
 
 ## Docker Deployment
 

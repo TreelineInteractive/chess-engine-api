@@ -194,7 +194,10 @@ jobs:
                     "DEBUG": "false",
                     "CORS_ORIGINS": "*",
                     "LOG_LEVEL": "INFO",
-                    "LOG_FORMAT": "json"
+                    "LOG_FORMAT": "json",
+                    "AUTH_ENABLED": "${{ secrets.AUTH_ENABLED || 'false' }}",
+                    "JWKS_URL": "${{ secrets.JWKS_URL || '' }}",
+                    "JWT_AUDIENCE": "${{ secrets.JWT_AUDIENCE || 'authenticated' }}"
                   }
                 }
               },

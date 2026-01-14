@@ -2,7 +2,30 @@
 
 ## Summary
 
-I've created a complete GitHub Actions workflow for deploying your Chess Engine API to AWS App Runner using OIDC authentication. The deployment will use the domain `chessengine.treelineint.click` in the `us-west-2` region.
+Your Chess Engine API is configured for automated deployment to AWS App Runner with **optional JWT authentication support**. The deployment uses OIDC for secure AWS authentication and deploys to `chessengine.treelineint.click` in `us-west-2`.
+
+## 🔐 Authentication Configuration (NEW!)
+
+The API now supports optional JWT authentication with JWKS for Supabase and other providers.
+
+### Required GitHub Secrets for Authentication
+
+Add these to **Settings → Secrets and variables → Actions → Secrets**:
+
+```bash
+# Authentication (Optional - omit if you want public API)
+AUTH_ENABLED=true
+JWKS_URL=https://your-project.supabase.co/auth/v1/jwks
+JWT_AUDIENCE=authenticated  # Optional, defaults to "authenticated"
+
+# AWS Deployment (Required)
+AWS_ROLE_ARN=arn:aws:iam::YOUR_ACCOUNT:role/GitHubActionsAppRunnerRole
+APP_RUNNER_ACCESS_ROLE_ARN=arn:aws:iam::YOUR_ACCOUNT:role/AppRunnerECRAccessRole
+```
+
+**Behavior:**
+- `AUTH_ENABLED=false` or omitted: Public API, no authentication required
+- `AUTH_ENABLED=true`: All endpoints (except `/health` and `/ready`) require valid JWT tokens
 
 ---
 

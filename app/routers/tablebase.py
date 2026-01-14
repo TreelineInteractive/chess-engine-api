@@ -1,9 +1,11 @@
 """Tablebase probe endpoints."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import get_current_user
 
 from app.config import Settings, get_settings
 from app.models.requests import TablebaseProbeRequest
@@ -52,6 +54,7 @@ async def probe_tablebase(
     request: TablebaseProbeRequest,
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
     settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> TablebaseProbeResponse:
     """Probe Syzygy tablebase."""
 

@@ -31,6 +31,11 @@ services:
       # Logging
       - LOG_LEVEL=INFO
       - LOG_FORMAT=json
+      # Authentication (Optional)
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - JWKS_URL=${JWKS_URL:-}
+      - JWT_AUDIENCE=${JWT_AUDIENCE:-authenticated}
+      - JWT_ISSUER=${JWT_ISSUER:-}
     volumes:
       # Mount app directory for development hot-reload
       - ./app:/app/app:ro
