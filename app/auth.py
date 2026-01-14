@@ -9,7 +9,7 @@ This module provides flexible authentication that can be:
 Usage:
     # Optional auth (returns None if disabled)
     user = Depends(get_current_user)
-    
+
     # Required auth (raises 401 if disabled or invalid)
     user = Depends(require_auth)
 """
@@ -19,8 +19,6 @@ from typing import Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi.security.utils import get_authorization_scheme_param
-from starlette.requests import Request
 from jose import JWTError, jwt
 from jwt import PyJWKClient
 
@@ -44,12 +42,16 @@ class JWTAuthenticator:
             try:
                 # Initialize PyJWKClient for JWKS
                 self.jwks_client = PyJWKClient(settings.jwks_url)
-                logger.info(f"JWT authentication enabled with JWKS URL: {settings.jwks_url}")
+                logger.info(
+                    f"JWT authentication enabled with JWKS URL: {settings.jwks_url}"
+                )
             except Exception as e:
                 logger.error(f"Failed to initialize JWKS client: {e}")
                 self.enabled = False
         elif self.enabled:
-            logger.warning("AUTH_ENABLED is true but JWKS_URL is not set. Authentication disabled.")
+            logger.warning(
+                "AUTH_ENABLED is true but JWKS_URL is not set. Authentication disabled."
+            )
             self.enabled = False
         else:
             logger.info("JWT authentication is disabled")
@@ -117,11 +119,11 @@ async def get_current_user_optional(
 ) -> Optional[dict]:
     """
     Get current user from JWT token (optional).
-    
+
     Returns:
         User payload if auth is enabled and token is valid
         None if auth is disabled or no token provided
-    
+
     Does not raise errors - suitable for optional authentication.
     """
     if not authenticator.enabled:
@@ -144,10 +146,10 @@ async def require_auth(
 ) -> dict:
     """
     Require valid JWT authentication.
-    
+
     Returns:
         User payload from validated token
-    
+
     Raises:
         HTTPException 401 if auth is disabled, no token, or invalid token
     """
@@ -175,11 +177,11 @@ async def get_current_user(
 ) -> Optional[dict]:
     """
     Get current user (enforces auth if enabled, allows anonymous if disabled).
-    
+
     This is the recommended dependency for most routes:
     - If auth is enabled: requires valid token (raises 401 if missing/invalid)
     - If auth is disabled: always returns None (no authentication required)
-    
+
     Returns:
         User payload if authenticated, None if auth disabled
     """

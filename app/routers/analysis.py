@@ -6,7 +6,6 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.auth import get_current_user
-
 from app.models.requests import (
     AnalyzeGameRequest,
     AnalyzePositionRequest,
@@ -504,7 +503,6 @@ async def get_wdl_stats(
 )
 async def lookup_opening(
     request: OpeningBookRequest,
-    analysis_service: Annotated[AnalysisService, Depends(get_analysis_service)],
     user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> dict:
     """Look up chess opening information."""
