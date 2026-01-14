@@ -22,6 +22,7 @@ A production-ready REST API service that wraps the Stockfish chess engine, provi
 - 🏆 **Benchmarking** - Engine performance measurement
 - ⚙️ **Engine Configuration** - Runtime UCI parameter updates
 - 🎲 **Tablebase Support** - Syzygy endgame tablebase probing
+- 🔐 **Optional Authentication** - JWT/JWKS support for Supabase and other providers
 - 🏗️ **Production Ready** - Docker containerized, horizontally scalable
 - 📚 **Auto Documentation** - OpenAPI/Swagger docs included
 - 🚀 **High Performance** - Async I/O, connection pooling
@@ -52,8 +53,9 @@ docker compose up --build
 cp .env.example .env
 
 # Edit .env with your authentication settings
+# See AUTHENTICATION.md for detailed setup instructions
 # AUTH_ENABLED=true
-# JWKS_URL=https://your-project.supabase.co/auth/v1/jwks
+# JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
 # JWT_AUDIENCE=authenticated
 
 # Run with your configuration
@@ -467,64 +469,37 @@ BENCHMARK_TIMEOUT_SECONDS=60
 
 The API supports optional JWT authentication using JWKS (JSON Web Key Set) for token validation. This is disabled by default to keep the API open for public use, but can be enabled for production deployments requiring user authentication.
 
-### Important: When Enabled, All Endpoints Require Authentication
+**📖 For detailed authentication setup, testing, and integration instructions, see [AUTHENTICATION.md](./AUTHENTICATION.md)**
 
-When `AUTH_ENABLED=true`, **all API endpoints require a valid JWT token** (except `/health` and `/ready` which remain public for health checks). Requests without valid tokens will receive a `401 Unauthorized` response.
+### Quick Setup
 
-### Supabase Integration
-
-If you're using Supabase for authentication, configure these environment variables:
-
+#### Supabase
 ```bash
 AUTH_ENABLED=true
-JWKS_URL=https://your-project.supabase.co/auth/v1/jwks
+JWKS_URL=https://your-project.supabase.co/auth/v1/.well-known/jwks.json
 JWT_AUDIENCE=authenticated
 ```
 
-### Other JWT Providers
-
-The API works with any JWT provider that exposes a JWKS endpoint:
-
-**Auth0:**
+#### Auth0
 ```bash
 AUTH_ENABLED=true
 JWKS_URL=https://your-domain.auth0.com/.well-known/jwks.json
 JWT_AUDIENCE=your-api-identifier
 ```
 
-**Custom Provider:**
-```bash
-AUTH_ENABLED=true
-JWKS_URL=https://your-auth-server.com/.well-known/jwks.json
-JWT_AUDIENCE=your-audience
-```
+### Protected Endpoints
 
-### Using Protected Endpoints
+When `AUTH_ENABLED=true`, all endpoints require a valid JWT token except:
+- `GET /api/v1/health` - Health check
+- `GET /api/v1/ready` - Readiness check
 
-When authentication is enabled (`AUTH_ENABLED=true`), **all API endpoints require authentication** except health checks. Include the JWT token in the Authorization header:
-
+Include the JWT token in requests:
 ```bash
 curl -X POST https://api.example.com/api/v1/best-move \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"fen": "startpos", "depth": 15}'
 ```
-
-### Public Endpoints (Always Accessible)
-
-These endpoints remain accessible without authentication even when `AUTH_ENABLED=true`:
-- `GET /api/v1/health` - Health check for monitoring/load balancers
-- `GET /api/v1/ready` - Readiness check for Kubernetes/orchestration
-
-All other endpoints require authentication when enabled.
-
-### Understanding the Authentication Implementation
-
-All API endpoints (except `/health` and `/ready`) use the `get_current_user` dependency:
-
-```python
-from app.auth import get_current_user
-from fastapi import Depends
 
 @router.post("/best-move")
 async def get_best_move(
@@ -542,24 +517,12 @@ async def get_best_move(
 - **AUTH_ENABLED=false**: User can access all endpoints without tokens, `user` parameter is None
 - **AUTH_ENABLED=true**: All endpoints require valid JWT token, `user` contains claims (sub, email, etc.), invalid/missing tokens return 401
 
-**Alternative: Always Require Auth (Even When Disabled)**
-
-If you want to enforce authentication regardless of the setting, use `require_auth`:
-
-```python
-from app.auth import require_auth
-
-@router.post("/always-protected")
-async def always_protected(
-    request: SomeRequest,
-    user: dict = Depends(require_auth)  # Always enforces auth
-):
-    return {"message": f"Hello {user.get('email')}"}
-```
+## Deployment
 
 For complete deployment guides including AWS App Runner (current setup), Docker Compose, and other cloud platforms, see:
-- **[DEPLOYMENT-SETUP.md](DEPLOYMENT-SETUP.md)** - AWS App Runner setup (current workflow)
-- **[ENV_SETUP.md](ENV_SETUP.md)** - Quick environment variable reference
+- **[AUTHENTICATION.md](./AUTHENTICATION.md)** - JWT authentication setup and testing
+- **[DEPLOYMENT-SETUP.md](./DEPLOYMENT-SETUP.md)** - AWS App Runner setup (current workflow)
+- **[ENV_SETUP.md](./ENV_SETUP.md)** - Quick environment variable reference
 
 ## Docker Deployment
 

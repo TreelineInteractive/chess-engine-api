@@ -12,7 +12,7 @@ pydantic-settings==2.7.0
 
 # Authentication (optional)
 python-jose[cryptography]==3.3.0
-jwcrypto==1.5.6
+PyJWT[crypto]==2.8.0
 
 # Environment management
 python-dotenv==1.0.1

@@ -8,7 +8,7 @@ This module provides flexible authentication that can be:
 
 Usage:
     # Optional auth (returns None if disabled)
-    user = Depends(get_current_user_optional)
+    user = Depends(get_current_user)
     
     # Required auth (raises 401 if disabled or invalid)
     user = Depends(require_auth)
@@ -17,12 +17,12 @@ Usage:
 import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security.utils import get_authorization_scheme_param
+from starlette.requests import Request
 from jose import JWTError, jwt
-from jwcrypto import jwk, jwt as jwcrypto_jwt
-from jwcrypto.jwk import JWKSet
-import requests
+from jwt import PyJWKClient
 
 from app.config import get_settings
 
@@ -33,22 +33,20 @@ security = HTTPBearer(auto_error=False)
 
 
 class JWTAuthenticator:
-    """JWT authenticator with JWKS support."""
+    """JWT authenticator with JWKS support for Supabase and other providers."""
 
     def __init__(self):
-        self.jwks: Optional[dict] = None
+        self.jwks_client: Optional[PyJWKClient] = None
         settings = get_settings()
         self.enabled = settings.auth_enabled
 
         if self.enabled and settings.jwks_url:
             try:
-                # Fetch JWKS keys
-                response = requests.get(settings.jwks_url, timeout=10)
-                response.raise_for_status()
-                self.jwks = response.json()
+                # Initialize PyJWKClient for JWKS
+                self.jwks_client = PyJWKClient(settings.jwks_url)
                 logger.info(f"JWT authentication enabled with JWKS URL: {settings.jwks_url}")
             except Exception as e:
-                logger.error(f"Failed to fetch JWKS: {e}")
+                logger.error(f"Failed to initialize JWKS client: {e}")
                 self.enabled = False
         elif self.enabled:
             logger.warning("AUTH_ENABLED is true but JWKS_URL is not set. Authentication disabled.")
@@ -57,49 +55,43 @@ class JWTAuthenticator:
             logger.info("JWT authentication is disabled")
 
     def decode_token(self, token: str) -> dict:
-        """Decode and validate JWT token."""
-        if not self.enabled or not self.jwks:
+        """Decode and validate JWT token using JWKS."""
+        if not self.enabled or not self.jwks_client:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Authentication not configured",
             )
 
+        settings = get_settings()
+
         try:
-            # Get the unverified header to extract the key ID (kid)
-            unverified_header = jwt.get_unverified_header(token)
-            kid = unverified_header.get("kid")
+            # Get the signing key from JWKS
+            signing_key = self.jwks_client.get_signing_key_from_jwt(token)
 
-            # Find the matching key from JWKS
-            key = None
-            for jwk_key in self.jwks.get("keys", []):
-                if jwk_key.get("kid") == kid:
-                    key = jwk_key
-                    break
-
-            if not key:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token: Signing key not found",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            # Decode and validate token
-            settings = get_settings()
+            # Decode and validate token with RS256
             payload = jwt.decode(
                 token,
-                key,
-                algorithms=["RS256"],
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
                 audience=settings.jwt_audience,
+                issuer=settings.jwt_issuer,
                 options={"verify_exp": True},
             )
 
             return payload
 
         except JWTError as e:
-            if "expired" in str(e).lower():
+            error_msg = str(e).lower()
+            if "expired" in error_msg:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Token has expired",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            elif "audience" in error_msg:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid token audience",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
             raise HTTPException(
@@ -121,7 +113,7 @@ authenticator = JWTAuthenticator()
 
 
 async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[dict]:
     """
     Get current user from JWT token (optional).
@@ -148,7 +140,7 @@ async def get_current_user_optional(
 
 
 async def require_auth(
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
     """
     Require valid JWT authentication.
@@ -179,7 +171,7 @@ async def require_auth(
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Security(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[dict]:
     """
     Get current user (enforces auth if enabled, allows anonymous if disabled).

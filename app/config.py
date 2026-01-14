@@ -147,7 +147,10 @@ class Settings(BaseSettings):
         default="authenticated",
         description="Expected JWT audience claim (Supabase uses 'authenticated')",
     )
-
+    jwt_issuer: Optional[str] = Field(
+        default=None,
+        description="Expected JWT issuer claim (e.g., https://your-project.supabase.co/auth/v1)",
+    )
     @property
     def cors_origins_list(self) -> list[str]:
         """Get CORS origins as a list."""
