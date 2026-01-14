@@ -134,6 +134,20 @@ class Settings(BaseSettings):
             raise ValueError(f"Invalid log level: {v}. Must be one of {valid_levels}")
         return upper_v
 
+    # Authentication Configuration (Optional)
+    auth_enabled: bool = Field(
+        default=False,
+        description="Enable JWT authentication (disabled by default for public use)",
+    )
+    jwks_url: Optional[str] = Field(
+        default=None,
+        description="JWKS URL for JWT validation (e.g., https://your-project.supabase.co/auth/v1/jwks)",
+    )
+    jwt_audience: Optional[str] = Field(
+        default="authenticated",
+        description="Expected JWT audience claim (Supabase uses 'authenticated')",
+    )
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Get CORS origins as a list."""

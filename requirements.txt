@@ -10,6 +10,10 @@ stockfish==4.0.5
 pydantic==2.10.3
 pydantic-settings==2.7.0
 
+# Authentication (optional)
+python-jose[cryptography]==3.3.0
+jwcrypto==1.5.6
+
 # Environment management
 python-dotenv==1.0.1
 

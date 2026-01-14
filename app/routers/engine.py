@@ -2,9 +2,11 @@
 
 import logging
 import time
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import get_current_user
 
 from app.config import Settings, get_settings
 from app.models.requests import EngineConfigRequest, PerftRequest
@@ -49,6 +51,7 @@ _start_time = time.time()
 )
 async def get_engine_info(
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> EngineInfoResponse:
     """Get Stockfish engine information."""
     try:
@@ -221,6 +224,7 @@ async def run_perft(
     request: PerftRequest,
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
     settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> PerftResponse:
     """Run performance test (perft)."""
 
@@ -279,6 +283,7 @@ async def run_perft(
 async def run_benchmark(
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
     settings: Annotated[Settings, Depends(get_settings)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> BenchmarkResponse:
     """Run engine benchmark."""
 
@@ -336,6 +341,7 @@ async def run_benchmark(
 async def configure_engine(
     request: EngineConfigRequest,
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> EngineConfigResponse:
     """Update engine configuration."""
 

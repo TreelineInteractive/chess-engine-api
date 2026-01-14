@@ -1,9 +1,11 @@
 """Analysis endpoints for position and game analysis."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import get_current_user
 
 from app.models.requests import (
     AnalyzeGameRequest,
@@ -81,6 +83,7 @@ def _validate_fen_or_raise(fen: str) -> None:
 async def get_best_move(
     request: BestMoveRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> BestMoveResponse:
     """Get the best move for a chess position."""
     _validate_fen_or_raise(request.fen)
@@ -147,6 +150,7 @@ async def get_best_move(
 async def evaluate_position(
     request: EvaluateRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> EvaluateResponse:
     """Evaluate a chess position."""
     _validate_fen_or_raise(request.fen)
@@ -208,6 +212,7 @@ async def evaluate_position(
 async def get_multi_pv(
     request: MultiPVRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> MultiPVResponse:
     """Get multiple best lines for a position."""
     _validate_fen_or_raise(request.fen)
@@ -272,6 +277,7 @@ async def get_multi_pv(
 async def analyze_position(
     request: AnalyzePositionRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> AnalyzePositionResponse:
     """Perform detailed position analysis."""
     _validate_fen_or_raise(request.fen)
@@ -351,6 +357,7 @@ async def analyze_position(
 async def analyze_game(
     request: AnalyzeGameRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> AnalyzeGameResponse:
     """Analyze a complete chess game."""
     _validate_fen_or_raise(request.starting_fen)
@@ -428,6 +435,7 @@ async def analyze_game(
 async def get_wdl_stats(
     request: WDLStatsRequest,
     service: Annotated[StockfishService, Depends(get_stockfish_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> dict:
     """Get Win/Draw/Loss probability statistics for a position."""
 
@@ -496,6 +504,8 @@ async def get_wdl_stats(
 )
 async def lookup_opening(
     request: OpeningBookRequest,
+    analysis_service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> dict:
     """Look up chess opening information."""
     from app.services.opening_service import get_opening_service

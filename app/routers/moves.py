@@ -1,9 +1,11 @@
 """Move-related endpoints for validation and legal moves."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth import get_current_user
 
 from app.models.requests import (
     LegalMovesRequest,
@@ -67,6 +69,7 @@ def _validate_fen_or_raise(fen: str) -> None:
 async def validate_move(
     request: ValidateMoveRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> ValidateMoveResponse:
     """Validate a chess move."""
     _validate_fen_or_raise(request.fen)
@@ -118,6 +121,7 @@ async def validate_move(
 async def get_legal_moves(
     request: LegalMovesRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> LegalMovesResponse:
     """Get all legal moves for a position."""
     _validate_fen_or_raise(request.fen)
@@ -183,6 +187,7 @@ async def get_legal_moves(
 async def validate_fen_endpoint(
     request: ValidateFenRequest,
     service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
 ) -> ValidateFenResponse:
     """Validate a FEN string."""
     try:

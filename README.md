@@ -46,7 +46,21 @@ cd chess-engine-api
 docker compose up --build
 ```
 
-3. Access the API:
+3. **Configure authentication** (optional):
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your authentication settings
+# AUTH_ENABLED=true
+# JWKS_URL=https://your-project.supabase.co/auth/v1/jwks
+# JWT_AUDIENCE=authenticated
+
+# Run with your configuration
+docker compose up
+```
+
+4. Access the API:
 - **API**: http://localhost:8000
 - **Documentation**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/api/v1/health
@@ -448,6 +462,104 @@ SYZYGY_PATH=              # Path to Syzygy tablebase files (leave empty if not u
 MAX_PERFT_DEPTH=6         # Maximum perft depth (1-7)
 BENCHMARK_TIMEOUT_SECONDS=60
 ```
+
+## Authentication (Optional)
+
+The API supports optional JWT authentication using JWKS (JSON Web Key Set) for token validation. This is disabled by default to keep the API open for public use, but can be enabled for production deployments requiring user authentication.
+
+### Important: When Enabled, All Endpoints Require Authentication
+
+When `AUTH_ENABLED=true`, **all API endpoints require a valid JWT token** (except `/health` and `/ready` which remain public for health checks). Requests without valid tokens will receive a `401 Unauthorized` response.
+
+### Supabase Integration
+
+If you're using Supabase for authentication, configure these environment variables:
+
+```bash
+AUTH_ENABLED=true
+JWKS_URL=https://your-project.supabase.co/auth/v1/jwks
+JWT_AUDIENCE=authenticated
+```
+
+### Other JWT Providers
+
+The API works with any JWT provider that exposes a JWKS endpoint:
+
+**Auth0:**
+```bash
+AUTH_ENABLED=true
+JWKS_URL=https://your-domain.auth0.com/.well-known/jwks.json
+JWT_AUDIENCE=your-api-identifier
+```
+
+**Custom Provider:**
+```bash
+AUTH_ENABLED=true
+JWKS_URL=https://your-auth-server.com/.well-known/jwks.json
+JWT_AUDIENCE=your-audience
+```
+
+### Using Protected Endpoints
+
+When authentication is enabled (`AUTH_ENABLED=true`), **all API endpoints require authentication** except health checks. Include the JWT token in the Authorization header:
+
+```bash
+curl -X POST https://api.example.com/api/v1/best-move \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fen": "startpos", "depth": 15}'
+```
+
+### Public Endpoints (Always Accessible)
+
+These endpoints remain accessible without authentication even when `AUTH_ENABLED=true`:
+- `GET /api/v1/health` - Health check for monitoring/load balancers
+- `GET /api/v1/ready` - Readiness check for Kubernetes/orchestration
+
+All other endpoints require authentication when enabled.
+
+### Understanding the Authentication Implementation
+
+All API endpoints (except `/health` and `/ready`) use the `get_current_user` dependency:
+
+```python
+from app.auth import get_current_user
+from fastapi import Depends
+
+@router.post("/best-move")
+async def get_best_move(
+    request: BestMoveRequest,
+    service: Annotated[AnalysisService, Depends(get_analysis_service)],
+    user: Annotated[Optional[dict], Depends(get_current_user)] = None,
+) -> BestMoveResponse:
+    # When AUTH_ENABLED=false: user is None (no auth required)
+    # When AUTH_ENABLED=true: user contains JWT claims or raises 401
+    # You can optionally use user data for logging, rate limiting, etc.
+    return await service.get_best_move(...)
+```
+
+**Behavior:**
+- **AUTH_ENABLED=false**: User can access all endpoints without tokens, `user` parameter is None
+- **AUTH_ENABLED=true**: All endpoints require valid JWT token, `user` contains claims (sub, email, etc.), invalid/missing tokens return 401
+
+**Alternative: Always Require Auth (Even When Disabled)**
+
+If you want to enforce authentication regardless of the setting, use `require_auth`:
+
+```python
+from app.auth import require_auth
+
+@router.post("/always-protected")
+async def always_protected(
+    request: SomeRequest,
+    user: dict = Depends(require_auth)  # Always enforces auth
+):
+    return {"message": f"Hello {user.get('email')}"}
+```
+
+For complete deployment guides including AWS App Runner (current setup), Docker Compose, and other cloud platforms, see:
+- **[DEPLOYMENT-SETUP.md](DEPLOYMENT-SETUP.md)** - AWS App Runner setup (current workflow)
+- **[ENV_SETUP.md](ENV_SETUP.md)** - Quick environment variable reference
 
 ## Docker Deployment
 
