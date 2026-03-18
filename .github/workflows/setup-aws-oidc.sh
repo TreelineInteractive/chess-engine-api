@@ -158,7 +158,7 @@ POLICY_DOCUMENT=$(cat <<EOF
       "Action": [
         "iam:PassRole"
       ],
-      "Resource": "arn:aws:iam::*:role/AppRunnerECRAccessRole"
+      "Resource": "arn:aws:iam::*:role/service-role/AppRunnerECRAccessRole"
     },
     {
       "Effect": "Allow",
