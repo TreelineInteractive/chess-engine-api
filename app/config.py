@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         description="Number of CPU threads for Stockfish",
     )
     stockfish_hash_size_mb: int = Field(
-        default=128,
+        default=64,
         ge=1,
         le=131072,
         description="Hash table size in MB",
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
         description="Maximum analysis depth allowed",
     )
     default_depth: int = Field(
-        default=15,
+        default=12,
         ge=1,
         le=50,
         description="Default analysis depth",
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
         description="Rate limit per IP per minute",
     )
     max_concurrent_analyses: int = Field(
-        default=10,
+        default=5,
         ge=1,
         le=100,
         description="Maximum concurrent analysis requests",

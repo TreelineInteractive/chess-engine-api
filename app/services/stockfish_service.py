@@ -108,6 +108,7 @@ class StockfishPool:
                 best_move = engine.get_best_move()
         """
         engine: Optional[Stockfish] = None
+        engine_crashed = False
 
         try:
             # Try to get an existing instance
@@ -141,21 +142,30 @@ class StockfishPool:
 
             yield engine
 
+        except StockfishException:
+            engine_crashed = True
+            raise
         except asyncio.TimeoutError:
             raise StockfishError(
                 "Timeout waiting for available Stockfish instance", "TIMEOUT"
             )
         finally:
             if engine is not None:
-                try:
-                    # Return engine to pool
-                    self._pool.put_nowait(engine)
-                except asyncio.QueueFull:
-                    # Pool is full, close this instance
+                if engine_crashed:
+                    # Discard crashed engines instead of returning them to the pool
+                    logger.warning("Discarding crashed Stockfish instance, will recreate on next request")
                     try:
                         engine.__del__()
                     except Exception:
                         pass
+                else:
+                    try:
+                        self._pool.put_nowait(engine)
+                    except asyncio.QueueFull:
+                        try:
+                            engine.__del__()
+                        except Exception:
+                            pass
 
     async def shutdown(self) -> None:
         """Shutdown all Stockfish instances in the pool."""
