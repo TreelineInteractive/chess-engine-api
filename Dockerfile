@@ -3,8 +3,9 @@
 
 FROM ubuntu:22.04 AS stockfish-builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
+# Install build dependencies with the patched trust store before fetching Stockfish.
+RUN apt-get update && apt-get satisfy -y \
+    'ca-certificates (>= 20260816ubuntu0.22.04.1)' \
     wget \
     tar \
     make \
@@ -32,7 +33,7 @@ RUN ARCH=$(uname -m) && \
 RUN test -f stockfish && chmod +x stockfish
 
 # Stage 2: Python application
-FROM python:3.11-slim
+FROM python:3.11-slim-trixie
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -40,8 +41,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     STOCKFISH_PATH=/usr/local/bin/stockfish
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Keep tracking Python 3.11 security releases. Its ssl module blocks the
+# compromised intermediates from 3.11.18, including during pip bootstrap.
+RUN python -I -c 'import sys; assert sys.version_info >= (3, 11, 18), "Python 3.11.18 or later required"' \
+    && apt-get update && apt-get satisfy -y \
+    'ca-certificates (>= 20250419+deb13u1)' \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -61,7 +65,7 @@ WORKDIR /app
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade 'pip>=26.2.2' \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code

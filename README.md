@@ -31,7 +31,7 @@ A production-ready REST API service that wraps the Stockfish chess engine, provi
 
 ### Prerequisites
 
-- Python 3.11+
+- A security-patched Python runtime for local installs. For Python 3.11, use 3.11.18 or newer. For newer branches, see the [Python security release floors](https://blog.python.org/2026/10/python-3152-31410-31318-31216-31118/).
 - Docker (optional, recommended)
 
 ### Running with Docker (Recommended)

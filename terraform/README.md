@@ -15,6 +15,14 @@ This Terraform root manages the existing `chess-engine-api` App Runner service i
 - `terraform.tfvars.example`: Starting point based on the documented app deployment
 - `outputs.tf`: Useful ARNs and service metadata
 
+## Selecting the App Runner image
+
+Build and publish the patched engine image using the deployment workflow for the target environment. Before running `terraform plan`, set `TF_VAR_image_identifier` to that image's full ECR URI and commit tag. Terraform also accepts the existing `-var` and local variable-file inputs.
+
+```sh
+export TF_VAR_image_identifier="${AWS_ACCOUNT_ID}.dkr.ecr.us-west-2.amazonaws.com/chess-engine-api:${GIT_COMMIT_SHA}"
+```
+
 ## Slack Notes
 
 Slack delivery uses an incoming webhook and a small Lambda function.
