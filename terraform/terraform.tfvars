@@ -1,6 +1,5 @@
 aws_region          = "us-west-2"
 service_name        = "chess-engine-api"
-image_identifier    = "022911965477.dkr.ecr.us-west-2.amazonaws.com/chess-engine-api:3c65a0f7fc4c982528d3ae67872acdbd44d086b6"
 ecr_access_role_arn = "arn:aws:iam::022911965477:role/service-role/AppRunnerECRAccessRole"
 
 instance_cpu    = "1024"
